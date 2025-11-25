@@ -25,6 +25,9 @@ class MessagingService {
         
         // Start queue processor
         this.startQueueProcessor();
+        
+        // Start cross-tab messaging for same-device communication
+        this.startCrossTabMessaging();
     }
 
     // Load banned words list (basic content moderation)
@@ -222,8 +225,97 @@ class MessagingService {
         message.timestamp = new Date(); // Update with actual send time
         
         this.messages.push(message);
+        
+        // Broadcast to other devices using localStorage events
+        this.broadcastMessage(message);
+        
         this.notifyMessageListeners(message);
         this.saveSettings();
+    }
+
+    // Broadcast message to other browser tabs/windows on same domain
+    broadcastMessage(message) {
+        try {
+            // Use a temporary localStorage key to trigger storage events
+            const broadcastData = {
+                type: 'new_message',
+                message: message,
+                timestamp: Date.now()
+            };
+            
+            localStorage.setItem('nearbychat_broadcast', JSON.stringify(broadcastData));
+            
+            // Remove the broadcast key immediately to allow future broadcasts
+            setTimeout(() => {
+                localStorage.removeItem('nearbychat_broadcast');
+            }, 100);
+        } catch (error) {
+            console.error('Failed to broadcast message:', error);
+        }
+    }
+
+    // Listen for messages from other browser tabs/windows
+    startCrossTabMessaging() {
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'nearbychat_broadcast' && e.newValue) {
+                try {
+                    const broadcastData = JSON.parse(e.newValue);
+                    
+                    if (broadcastData.type === 'new_message') {
+                        const message = broadcastData.message;
+                        
+                        // Don't add our own messages
+                        if (message.userId !== this.currentUser.id) {
+                            // Check if message is within our range
+                            const currentPos = window.LocationService ? 
+                                new window.LocationService().getCurrentPosition() : null;
+                            
+                            if (currentPos) {
+                                const distance = this.calculateDistance(
+                                    currentPos.coords.latitude,
+                                    currentPos.coords.longitude,
+                                    message.location.lat,
+                                    message.location.lon
+                                );
+                                
+                                if (distance <= this.broadcastRange) {
+                                    // Add message if we don't already have it
+                                    const existingMessage = this.messages.find(m => m.id === message.id);
+                                    if (!existingMessage) {
+                                        this.messages.push(message);
+                                        this.notifyMessageListeners(message);
+                                        this.saveSettings();
+                                        
+                                        // Play notification sound
+                                        if (localStorage.getItem('nearbychat_sound') === 'true') {
+                                            this.playNotificationSound();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to process broadcast message:', error);
+                }
+            }
+        });
+    }
+
+    // Calculate distance between two points
+    calculateDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371000; // Earth's radius in meters
+        const dLat = this.toRadians(lat2 - lat1);
+        const dLon = this.toRadians(lon2 - lon1);
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(this.toRadians(lat1)) * Math.cos(this.toRadians(lat2)) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+    }
+
+    toRadians(degrees) {
+        return degrees * (Math.PI / 180);
     }
 
     // Generate unique message ID
