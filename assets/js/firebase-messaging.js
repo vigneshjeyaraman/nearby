@@ -21,13 +21,13 @@ class FirebaseMessagingService {
         try {
             // Default config - replace with your Firebase project config
             this.config = config || {
-                apiKey: "demo-api-key",
-                authDomain: "proximsg-demo.firebaseapp.com",
-                databaseURL: "https://proximsg-demo-default-rtdb.firebaseio.com",
-                projectId: "proximsg-demo",
-                storageBucket: "proximsg-demo.appspot.com",
-                messagingSenderId: "123456789",
-                appId: "1:123456789:web:abcdef123456"
+                apiKey: "AIzaSyAzekyDEpwmiHn-tiawWe-TlNv50FFpLs4",
+                authDomain: "nearby-b1a8d.firebaseapp.com",
+                databaseURL: "https://nearby-b1a8d-default-rtdb.europe-west1.firebasedatabase.app/",
+                projectId: "nearby-b1a8d",
+                storageBucket: "nearby-b1a8d.firebasestorage.app",
+                messagingSenderId: "724922368726",
+                appId: "1:724922368726:web:a309801d869f4df861bf77"
             };
 
             // Check if already initialized
