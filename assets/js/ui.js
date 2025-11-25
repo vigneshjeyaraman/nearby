@@ -87,7 +87,8 @@ class UIController {
             showUsername: document.getElementById('show-username'),
             autoClearChat: document.getElementById('auto-clear-chat'),
             usernameInput: document.getElementById('username-input'),
-            clearChatBtn: document.getElementById('clear-chat-btn')
+            clearChatBtn: document.getElementById('clear-chat-btn'),
+            testFirebaseBtn: document.getElementById('test-firebase-btn')
         };
 
         this.modals = {
@@ -235,9 +236,9 @@ class UIController {
             });
         }
 
-        if (this.elements.clearChatBtn) {
-            this.elements.clearChatBtn.addEventListener('click', () => {
-                this.showClearChatConfirmation();
+        if (this.elements.testFirebaseBtn) {
+            this.elements.testFirebaseBtn.addEventListener('click', () => {
+                this.onTestFirebase && this.onTestFirebase();
             });
         }
     }

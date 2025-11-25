@@ -21,8 +21,8 @@ class MessagingService {
         this.bannedWords = this.loadBannedWords();
         
         // Firebase REST API integration
-        this.firebaseService = new FirebaseRestMessaging();
-        this.isFirebaseEnabled = true; // REST API is always available
+        this.firebaseService = null;
+        this.isFirebaseEnabled = false;
         
         // Load settings from localStorage
         this.loadSettings();
@@ -40,31 +40,39 @@ class MessagingService {
     // Initialize Firebase REST API messaging
     async initializeFirebase() {
         try {
-            if (this.firebaseService) {
-                // Test Firebase connection
-                const connected = await this.firebaseService.testConnection();
-                
-                if (connected) {
-                    // Set up Firebase message listener
-                    this.firebaseService.onMessage((message) => {
-                        console.log('📨 Received Firebase message:', message.content);
-                        this.messages.push(message);
-                        this.notifyMessageListeners(message);
-                        
-                        // Play notification sound
-                        if (localStorage.getItem('nearbychat_sound') === 'true') {
-                            this.playNotificationSound();
-                        }
-                    });
+            // Check if FirebaseRestMessaging is available
+            if (typeof FirebaseRestMessaging === 'undefined') {
+                console.warn('🚨 FirebaseRestMessaging not loaded, using localStorage fallback');
+                this.isFirebaseEnabled = false;
+                return;
+            }
+
+            this.firebaseService = new FirebaseRestMessaging();
+            
+            // Test Firebase connection
+            const connected = await this.firebaseService.testConnection();
+            
+            if (connected) {
+                // Set up Firebase message listener
+                this.firebaseService.onMessage((message) => {
+                    console.log('📨 Received Firebase message:', message.content);
+                    this.messages.push(message);
+                    this.notifyMessageListeners(message);
                     
-                    console.log('🔥 Firebase REST API messaging enabled');
-                } else {
-                    console.log('📱 Using localStorage messaging (Firebase not available)');
-                    this.isFirebaseEnabled = false;
-                }
+                    // Play notification sound
+                    if (localStorage.getItem('nearbychat_sound') === 'true') {
+                        this.playNotificationSound();
+                    }
+                });
+                
+                this.isFirebaseEnabled = true;
+                console.log('🔥 Firebase REST API messaging enabled');
+            } else {
+                console.log('📱 Using localStorage messaging (Firebase connection failed)');
+                this.isFirebaseEnabled = false;
             }
         } catch (error) {
-            console.error('Firebase REST API initialization error:', error);
+            console.error('❌ Firebase REST API initialization error:', error);
             this.isFirebaseEnabled = false;
         }
     }
@@ -273,9 +281,19 @@ class MessagingService {
         this.messages.push(message);
         
         // Send to Firebase for real-time cross-device messaging
-        if (this.isFirebaseEnabled) {
-            this.firebaseService.sendMessage(message);
+        if (this.isFirebaseEnabled && this.firebaseService) {
+            console.log('📤 Attempting to send message via Firebase REST API');
+            this.firebaseService.sendMessage(message).then((success) => {
+                if (success) {
+                    console.log('✅ Message sent to Firebase successfully');
+                } else {
+                    console.error('❌ Failed to send message to Firebase');
+                }
+            }).catch((error) => {
+                console.error('❌ Error sending message to Firebase:', error);
+            });
         } else {
+            console.log('📱 Firebase disabled, using localStorage fallback');
             // Fallback to localStorage events for same-device messaging
             this.broadcastMessage(message);
         }

@@ -29,8 +29,11 @@ class FirebaseRestMessaging {
 
     // Send message to Firebase using REST API
     async sendMessage(message) {
+        console.log('🔍 Firebase sendMessage called with:', message);
+        console.log('🔍 Location key:', this.locationKey);
+        
         if (!this.locationKey) {
-            console.warn('Location not set for Firebase messaging');
+            console.warn('⚠️ Location not set for Firebase messaging');
             return false;
         }
 

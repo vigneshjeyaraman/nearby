@@ -155,6 +155,7 @@ class NearbyChat {
         this.uiController.onUsernameChanged = (username) => this.updateUsername(username);
         this.uiController.onUsernameSettingChanged = (show) => this.updateUsernameVisibility(show);
         this.uiController.onClearChat = () => this.clearChat();
+        this.uiController.onTestFirebase = () => this.testFirebase();
     }
 
     // Setup messaging event handlers
@@ -421,6 +422,63 @@ class NearbyChat {
         } catch (error) {
             console.error('Failed to clear chat:', error);
             this.uiController.showError('Failed to clear messages. Please try again.');
+        }
+    }
+
+    // Test Firebase connection
+    async testFirebase() {
+        console.log('🧪 Testing Firebase connection...');
+        
+        try {
+            // Get current location
+            const position = this.locationService.getCurrentPosition();
+            if (!position) {
+                this.uiController.showError('Location required for Firebase test');
+                return;
+            }
+
+            // Test Firebase connection
+            if (this.messagingService.firebaseService) {
+                const connected = await this.messagingService.firebaseService.testConnection();
+                
+                if (connected) {
+                    // Set user location for Firebase
+                    this.messagingService.updateFirebaseContext({
+                        lat: position.coords.latitude,
+                        lon: position.coords.longitude
+                    });
+                    
+                    // Send test message
+                    const testMessage = {
+                        id: 'test_' + Date.now(),
+                        content: 'Firebase test message from UI',
+                        userId: this.messagingService.currentUser.id,
+                        username: this.messagingService.currentUser.name,
+                        location: {
+                            lat: position.coords.latitude,
+                            lon: position.coords.longitude
+                        },
+                        range: this.messagingService.broadcastRange,
+                        timestamp: new Date(),
+                        isOwn: true
+                    };
+                    
+                    const success = await this.messagingService.firebaseService.sendMessage(testMessage);
+                    
+                    if (success) {
+                        this.uiController.showSuccess('✅ Firebase test successful! Check Firebase console.');
+                    } else {
+                        this.uiController.showError('❌ Firebase test failed - message not sent');
+                    }
+                } else {
+                    this.uiController.showError('❌ Firebase connection test failed');
+                }
+            } else {
+                this.uiController.showError('❌ Firebase service not initialized');
+            }
+        } catch (error) {
+            console.error('Firebase test error:', error);
+            this.uiController.showError('❌ Firebase test error: ' + error.message);
         }
     }
 
