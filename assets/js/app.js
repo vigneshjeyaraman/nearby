@@ -276,6 +276,12 @@ class NearbyChat {
             }
             this.lastLocationUpdate = now;
             
+            // Update Firebase context with new location for real-time messaging
+            this.messagingService.updateFirebaseContext({
+                lat: position.coords.latitude,
+                lon: position.coords.longitude
+            });
+            
             // Update location name (with error handling)
             this.locationService.getLocationName()
                 .then(name => {

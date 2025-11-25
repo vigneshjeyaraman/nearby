@@ -20,14 +20,58 @@ class MessagingService {
         this.minMessageLength = 1;
         this.bannedWords = this.loadBannedWords();
         
+        // Firebase integration
+        this.firebaseService = new FirebaseMessagingService();
+        this.isFirebaseEnabled = false;
+        
         // Load settings from localStorage
         this.loadSettings();
+        
+        // Initialize Firebase
+        this.initializeFirebase();
         
         // Start queue processor
         this.startQueueProcessor();
         
         // Start cross-tab messaging for same-device communication
         this.startCrossTabMessaging();
+    }
+
+    // Initialize Firebase for real-time messaging
+    async initializeFirebase() {
+        try {
+            if (this.firebaseService) {
+                this.isFirebaseEnabled = await this.firebaseService.initialize();
+                
+                if (this.isFirebaseEnabled) {
+                    // Set up Firebase message listener
+                    this.firebaseService.onMessage((message) => {
+                        console.log('📨 Received Firebase message:', message.content);
+                        this.messages.push(message);
+                        this.notifyMessageListeners(message);
+                        
+                        // Play notification sound
+                        if (localStorage.getItem('nearbychat_sound') === 'true') {
+                            this.playNotificationSound();
+                        }
+                    });
+                    
+                    console.log('🔥 Firebase real-time messaging enabled');
+                } else {
+                    console.log('📱 Using localStorage messaging (Firebase not available)');
+                }
+            }
+        } catch (error) {
+            console.error('Firebase initialization error:', error);
+            this.isFirebaseEnabled = false;
+        }
+    }
+
+    // Update Firebase user context when location changes
+    updateFirebaseContext(location) {
+        if (this.isFirebaseEnabled && location) {
+            this.firebaseService.setUser(this.currentUser.id, location);
+        }
     }
 
     // Load banned words list (basic content moderation)
@@ -226,8 +270,13 @@ class MessagingService {
         
         this.messages.push(message);
         
-        // Broadcast to other devices using localStorage events
-        this.broadcastMessage(message);
+        // Send to Firebase for real-time cross-device messaging
+        if (this.isFirebaseEnabled) {
+            this.firebaseService.sendMessage(message);
+        } else {
+            // Fallback to localStorage events for same-device messaging
+            this.broadcastMessage(message);
+        }
         
         this.notifyMessageListeners(message);
         this.saveSettings();
