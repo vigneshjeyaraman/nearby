@@ -11,8 +11,11 @@ class FirebaseMessagingService {
         
         // Check if Firebase is available
         if (typeof firebase === 'undefined') {
-            console.warn('Firebase SDK not loaded. Using localStorage fallback.');
+            console.warn('🚨 Firebase SDK not loaded. Using localStorage fallback.');
+            console.warn('Check if Firebase scripts are loaded in HTML');
             return;
+        } else {
+            console.log('✅ Firebase SDK detected');
         }
     }
 
