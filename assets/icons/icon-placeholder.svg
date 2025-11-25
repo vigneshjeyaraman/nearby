@@ -1,7 +1,0 @@
-<!-- Placeholder for icon-192x192.png -->
-<!-- This is a placeholder. Replace with actual PNG icons -->
-<svg width="192" height="192" viewBox="0 0 192 192" xmlns="http://www.w3.org/2000/svg">
-    <rect width="192" height="192" rx="24" fill="#6366f1"/>
-    <text x="96" y="110" font-family="system-ui" font-size="48" text-anchor="middle" fill="white">📡</text>
-    <text x="96" y="140" font-family="system-ui" font-size="14" text-anchor="middle" fill="white">NearbyChat</text>
-</svg>
