@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NearbyChat - Connect with People Around You</title>
+    <meta name="description" content="Send messages to people in your vicinity. A secure, privacy-focused proximity messaging app.">
+    <meta name="theme-color" content="#6366f1">
+    
+    <!-- Security Headers -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self';">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
+    
+    <!-- SEO Meta Tags -->
+    <meta name="keywords" content="proximity messaging, local chat, nearby users, location-based chat, PWA">
+    <meta name="author" content="NearbyChat Team">
+    <meta name="robots" content="index, follow">
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content="NearbyChat - Connect with People Around You">
+    <meta property="og:description" content="Send messages to people in your vicinity. A secure, privacy-focused proximity messaging app.">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="assets/icons/icon-512x512.png">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="NearbyChat - Connect with People Around You">
+    <meta name="twitter:description" content="Send messages to people in your vicinity. A secure, privacy-focused proximity messaging app.">
+    
+    <!-- PWA Meta Tags -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="assets/icons/icon-192x192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="NearbyChat">
+    
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="loading-spinner"></div>
+        <p>Finding nearby users...</p>
+    </div>
+
+    <!-- Permission Request Modal -->
+    <div id="permission-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Location Access Required</h2>
+            <p>NearbyChat needs your location to connect you with people nearby.</p>
+            <div class="modal-actions">
+                <button id="grant-permission" class="btn btn-primary">Grant Permission</button>
+                <button id="deny-permission" class="btn btn-secondary">Use Without Location</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="app" class="app hidden">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="app-title">
+                    <span class="icon">📡</span>
+                    NearbyChat
+                </h1>
+                <div class="header-controls">
+                    <button id="range-btn" class="btn btn-secondary">
+                        <span id="current-range">100m</span>
+                    </button>
+                    <button id="settings-btn" class="btn btn-secondary">⚙️</button>
+                </div>
+            </div>
+            <div class="status-bar">
+                <div id="user-count" class="status-item">
+                    <span class="icon">👥</span>
+                    <span id="nearby-count">0</span> nearby
+                </div>
+                <div id="location-status" class="status-item">
+                    <span class="icon">📍</span>
+                    <span id="location-text">Locating...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Error Display -->
+        <div id="error-banner" class="error-banner hidden">
+            <span class="error-icon">⚠️</span>
+            <span id="error-text"></span>
+            <button id="dismiss-error" class="dismiss-btn">✕</button>
+        </div>
+
+        <!-- Offline Indicator -->
+        <div id="offline-banner" class="offline-banner hidden">
+            <span class="offline-icon">📡</span>
+            <span>You're offline. Messages will be queued until connection is restored.</span>
+        </div>
+
+        <!-- Messages Area -->
+        <main class="messages-container">
+            <div id="messages" class="messages">
+                <div class="welcome-message">
+                    <h3>Welcome to NearbyChat! 👋</h3>
+                    <p>Connect with real people nearby! Your messages will be visible to others within your selected range when they're online.</p>
+                    <p><small>💡 Share this app with friends to start chatting!</small></p>
+                </div>
+            </div>
+        </main>
+
+        <!-- Message Input -->
+        <div class="input-container">
+            <div class="input-wrapper">
+                <textarea 
+                    id="message-input" 
+                    placeholder="Type a message to nearby users..." 
+                    rows="1"
+                    maxlength="280"
+                ></textarea>
+                <button id="send-btn" class="send-btn" disabled>
+                    <span class="icon">🚀</span>
+                </button>
+            </div>
+            <div class="input-meta">
+                <span id="char-count">0/280</span>
+                <span class="broadcast-range">Broadcasting to <span id="broadcast-range">100m</span></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Range Selection Modal -->
+    <div id="range-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Select Broadcast Range</h2>
+            <div class="range-options">
+                <button class="range-option" data-range="50">50m - Very Close</button>
+                <button class="range-option" data-range="100">100m - Nearby</button>
+                <button class="range-option" data-range="250">250m - Local Area</button>
+                <button class="range-option" data-range="500">500m - Wide Area</button>
+                <button class="range-option" data-range="1000">1km - Extended Range</button>
+            </div>
+            <button id="close-range-modal" class="btn btn-secondary">Close</button>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Settings</h2>
+            <div class="setting-group">
+                <label class="setting-label">
+                    <input type="checkbox" id="sound-notifications"> 
+                    Sound Notifications
+                </label>
+                <label class="setting-label">
+                    <input type="checkbox" id="show-username"> 
+                    Show Username
+                </label>
+                <label class="setting-label">
+                    <input type="checkbox" id="auto-clear-chat" checked> 
+                    Auto-clear chat on page refresh
+                </label>
+                <label class="setting-label">
+                    <span>Username:</span>
+                    <input type="text" id="username-input" placeholder="Anonymous" maxlength="20">
+                </label>
+            </div>
+            <div class="setting-group">
+                <button id="clear-chat-btn" class="btn btn-secondary clear-chat-btn">
+                    🗑️ Clear Chat History
+                </button>
+                <p class="setting-note">This will permanently delete all messages from this device.</p>
+            </div>
+            <div class="setting-group">
+                <h3>About</h3>
+                <p>NearbyChat v1.0 - Connect with people around you</p>
+            </div>
+            <button id="close-settings-modal" class="btn btn-secondary">Close</button>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="assets/js/location.js"></script>
+    <script src="assets/js/messaging.js"></script>
+    <script src="assets/js/ui.js"></script>
+    <script src="assets/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+{
+  "name": "nearbychat",
+  "version": "1.0.0",
+  "description": "A secure, privacy-focused proximity messaging Progressive Web App",
+  "main": "index.html",
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "serve": "python3 -m http.server 8000",
+    "build": "echo 'No build step required for this static app'",
+    "test": "echo 'Tests not implemented yet'",
+    "lint": "echo 'Linting not configured'",
+    "deploy": "echo 'Configure your deployment target'"
+  },
+  "keywords": [
+    "proximity-messaging",
+    "local-chat",
+    "pwa",
+    "geolocation",
+    "offline-first",
+    "privacy",
+    "security"
+  ],
+  "author": "NearbyChat Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/nearbychat.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/nearbychat/issues"
+  },
+  "homepage": "https://github.com/yourusername/nearbychat#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "browserslist": [
+    "defaults",
+    "not IE 11",
+    "> 1%",
+    "last 2 versions"
+  ]
+}
