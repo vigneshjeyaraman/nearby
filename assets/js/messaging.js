@@ -20,9 +20,9 @@ class MessagingService {
         this.minMessageLength = 1;
         this.bannedWords = this.loadBannedWords();
         
-        // Firebase integration
-        this.firebaseService = new FirebaseMessagingService();
-        this.isFirebaseEnabled = false;
+        // Firebase REST API integration
+        this.firebaseService = new FirebaseRestMessaging();
+        this.isFirebaseEnabled = true; // REST API is always available
         
         // Load settings from localStorage
         this.loadSettings();
@@ -37,13 +37,14 @@ class MessagingService {
         this.startCrossTabMessaging();
     }
 
-    // Initialize Firebase for real-time messaging
+    // Initialize Firebase REST API messaging
     async initializeFirebase() {
         try {
             if (this.firebaseService) {
-                this.isFirebaseEnabled = await this.firebaseService.initialize();
+                // Test Firebase connection
+                const connected = await this.firebaseService.testConnection();
                 
-                if (this.isFirebaseEnabled) {
+                if (connected) {
                     // Set up Firebase message listener
                     this.firebaseService.onMessage((message) => {
                         console.log('📨 Received Firebase message:', message.content);
@@ -56,13 +57,14 @@ class MessagingService {
                         }
                     });
                     
-                    console.log('🔥 Firebase real-time messaging enabled');
+                    console.log('🔥 Firebase REST API messaging enabled');
                 } else {
                     console.log('📱 Using localStorage messaging (Firebase not available)');
+                    this.isFirebaseEnabled = false;
                 }
             }
         } catch (error) {
-            console.error('Firebase initialization error:', error);
+            console.error('Firebase REST API initialization error:', error);
             this.isFirebaseEnabled = false;
         }
     }
