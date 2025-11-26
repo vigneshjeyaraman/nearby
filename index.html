@@ -805,6 +805,9 @@
                 this.country = null;
                 this.cityName = null;
                 
+                // 🧹 Thread Clearing
+                this.threadClearStarted = false;
+                
                 this.initElements();
                 this.setupCleanupListeners();
                 // Check for cleanup from previous session
@@ -848,10 +851,12 @@
                 this.settingsBtn.addEventListener('click', () => this.showSettingsModal());
                 this.clearBtn.addEventListener('click', () => this.showClearModal());
                 
-                // Add double-click on clear button for manual cleanup testing
+                // Add double-click on clear button for manual thread clearing testing
                 this.clearBtn.addEventListener('dblclick', () => {
-                    console.log('🧪 MANUAL CLEANUP TEST - Cleaning up user messages');
-                    this.syncCleanupMessages();
+                    console.log('🧪 MANUAL THREAD CLEAR TEST - Clearing entire thread');
+                    // Reset the flag to allow manual testing
+                    this.threadClearStarted = false;
+                    this.syncClearEntireThread();
                 });
                 
                 // Settings modal events
@@ -1667,20 +1672,24 @@
             setupCleanupListeners() {
                 // Always clear entire thread on exit - default behavior
                 window.addEventListener('beforeunload', (e) => {
+                    console.log('🚪 BEFOREUNLOAD EVENT - Triggering thread clear');
                     this.syncClearEntireThread();
                 });
                 
                 window.addEventListener('unload', () => {
+                    console.log('🚪 UNLOAD EVENT - Triggering thread clear');
                     this.syncClearEntireThread();
                 });
                 
                 document.addEventListener('visibilitychange', () => {
                     if (document.hidden) {
+                        console.log('👁️ VISIBILITY CHANGE - Page hidden, triggering thread clear');
                         this.syncClearEntireThread();
                     }
                 });
                 
                 window.addEventListener('pagehide', () => {
+                    console.log('🚪 PAGEHIDE EVENT - Triggering thread clear');
                     this.syncClearEntireThread();
                 });
                 
@@ -1832,7 +1841,7 @@
                     this.locationInfo.innerHTML = `
                         <span class="status-indicator"></span>
                         ${locationText}
-                        <span id="autoRefreshIndicator" class="auto-refresh-indicator"><strong>Auto-refresh: 20sec</strong></span>
+                        <span id="autoRefreshIndicator" class="auto-refresh-indicator"><strong>Auto-refresh: 20sec (9-bucket)</strong></span>
                         <div class="user-info">Chatting as: ${this.username} • Reputation: ${this.userReputation}</div>
                     `;
                 }
@@ -1974,7 +1983,10 @@
             // 🧹 THREAD CLEARING FUNCTIONALITY
 
             syncClearEntireThread() {
-                if (this.threadClearStarted || !this.locationKey) return;
+                if (this.threadClearStarted || !this.locationKey) {
+                    console.log('🧹 THREAD CLEAR SKIPPED - Already started or no locationKey:', { started: this.threadClearStarted, hasKey: !!this.locationKey });
+                    return;
+                }
                 
                 this.threadClearStarted = true;
                 console.log('🧹 CLEARING ENTIRE THREAD for location:', this.locationKey, '(default behavior)');
@@ -1985,11 +1997,11 @@
                     xhr.open('DELETE', `${this.firebaseUrl}/proximity/${this.locationKey}.json`, false); // false = synchronous
                     xhr.send();
                     
-                    if (xhr.status === 200) {
-                        console.log('✅ ENTIRE THREAD CLEARED');
+                    if (xhr.status === 200 || xhr.status === 204) {
+                        console.log('✅ ENTIRE THREAD CLEARED - Status:', xhr.status);
                         this.showThreadClearNotification();
                     } else {
-                        console.error('Failed to clear thread:', xhr.status);
+                        console.error('Failed to clear thread - Status:', xhr.status, 'Response:', xhr.responseText);
                     }
                 } catch (error) {
                     console.error('Sync thread clear failed:', error);
