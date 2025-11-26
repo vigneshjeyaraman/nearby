@@ -476,6 +476,56 @@
             background: #e0e0e0;
         }
 
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            user-select: none;
+            margin: 10px 0;
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            display: none;
+        }
+
+        .checkbox-custom {
+            width: 18px;
+            height: 18px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            position: relative;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .checkbox-label input[type="checkbox"]:checked + .checkbox-custom {
+            background: #dc3545;
+            border-color: #dc3545;
+        }
+
+        .checkbox-label input[type="checkbox"]:checked + .checkbox-custom::after {
+            content: '✓';
+            position: absolute;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .setting-warning {
+            background: linear-gradient(135deg, #f8d7da 0%, #f5c2c7 100%);
+            border: 1px solid #dc3545;
+            border-radius: 8px;
+            padding: 8px 12px;
+            margin-top: 8px;
+            font-size: 12px;
+            color: #721c24;
+            line-height: 1.3;
+        }
+
         .user-info {
             font-size: 11px;
             opacity: 0.8;
@@ -692,6 +742,17 @@
                 </div>
             </div>
             
+            <div class="setting-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="clearThreadToggle">
+                    <span class="checkbox-custom"></span>
+                    Clear entire chat thread when I leave
+                </label>
+                <div class="setting-warning">
+                    ⚠️ This will delete ALL messages in this location for everyone when you close the tab!
+                </div>
+            </div>
+            
             <div class="settings-buttons">
                 <button id="saveSettings" class="settings-btn-action primary">Save Changes</button>
                 <button id="cancelSettings" class="settings-btn-action secondary">Cancel</button>
@@ -774,6 +835,7 @@
                 this.usernameInput = document.getElementById('usernameInput');
                 this.radiusSlider = document.getElementById('radiusSlider');
                 this.radiusDisplay = document.getElementById('radiusDisplay');
+                this.clearThreadToggle = document.getElementById('clearThreadToggle');
                 this.saveSettings = document.getElementById('saveSettings');
                 this.cancelSettings = document.getElementById('cancelSettings');
                 
@@ -795,6 +857,12 @@
                 this.refreshBtn.addEventListener('click', () => this.refreshMessages());
                 this.settingsBtn.addEventListener('click', () => this.showSettingsModal());
                 this.clearBtn.addEventListener('click', () => this.showClearModal());
+                
+                // Add double-click on clear button for manual cleanup testing
+                this.clearBtn.addEventListener('dblclick', () => {
+                    console.log('🧪 MANUAL CLEANUP TEST - Cleaning up user messages');
+                    this.syncCleanupMessages();
+                });
                 
                 // Settings modal events
                 this.radiusSlider.addEventListener('input', () => this.updateRadiusDisplay());
@@ -985,6 +1053,7 @@
             showSettingsModal() {
                 this.usernameInput.value = this.username;
                 this.radiusSlider.value = this.radius;
+                this.clearThreadToggle.checked = localStorage.getItem('clearThreadOnExit') === 'true';
                 this.updateRadiusDisplay();
                 this.settingsModal.style.display = 'flex';
             }
@@ -1021,8 +1090,10 @@
                 // Update settings
                 this.username = newUsername;
                 this.radius = newRadius;
+                this.clearThreadOnExit = this.clearThreadToggle.checked;
                 this.saveUsername(newUsername);
                 this.saveRadius(newRadius);
+                localStorage.setItem('clearThreadOnExit', this.clearThreadOnExit.toString());
                 
                 // Update location key if radius changed
                 if (this.location) {
@@ -1054,7 +1125,7 @@
                 this.locationInfo.innerHTML = `
                     <span class="status-indicator"></span>
                     ${locationText}
-                    <span id="autoRefreshIndicator" class="auto-refresh-indicator"><strong>Auto-refresh: 1min</strong></span>
+                    <span id="autoRefreshIndicator" class="auto-refresh-indicator"><strong>Auto-refresh: 20sec</strong></span>
                     <div class="user-info">Chatting as: ${this.username} • Reputation: ${this.userReputation}</div>
                 `;
             }
@@ -1125,6 +1196,7 @@
                 
                 // Track this message for cleanup
                 this.sentMessageIds.push(message.id);
+                console.log('📝 TRACKING MESSAGE for cleanup:', message.id, '- Total tracked:', this.sentMessageIds.length);
                 
                 // Update UI counters
                 this.updateLocationDisplay();
@@ -1367,10 +1439,10 @@
                     clearInterval(this.autoRefreshInterval);
                 }
                 
-                // Start auto-refresh every 60 seconds (1 minute)
+                // Start auto-refresh every 20 seconds
                 this.autoRefreshInterval = setInterval(() => {
                     this.performAutoRefresh();
-                }, 60000);
+                }, 20000);
             }
 
             stopAutoRefresh() {
@@ -1403,7 +1475,7 @@
                             indicator.textContent = `✨ ${newMessages} new message${newMessages > 1 ? 's' : ''}`;
                             setTimeout(() => {
                                 if (indicator) {
-                                    indicator.textContent = 'Auto-refresh: 1min';
+                                    indicator.textContent = 'Auto-refresh: 20sec';
                                     indicator.classList.remove('refreshing');
                                 }
                             }, 2000);
@@ -1413,7 +1485,7 @@
                             indicator.textContent = '✓ Up to date';
                             setTimeout(() => {
                                 if (indicator) {
-                                    indicator.textContent = 'Auto-refresh: 1min';
+                                    indicator.textContent = 'Auto-refresh: 20sec';
                                     indicator.classList.remove('refreshing');
                                 }
                             }, 1500);
@@ -1425,7 +1497,7 @@
                         indicator.textContent = '⚠️ Refresh failed';
                         setTimeout(() => {
                             if (indicator) {
-                                indicator.textContent = 'Auto-refresh: 1min';
+                                indicator.textContent = 'Auto-refresh: 20sec';
                                 indicator.classList.remove('refreshing');
                             }
                         }, 2000);
@@ -1538,106 +1610,125 @@
             }
 
             setupCleanupListeners() {
-                // Multiple cleanup triggers to ensure messages are deleted when user leaves
+                // Load cleanup preferences
+                this.clearThreadOnExit = localStorage.getItem('clearThreadOnExit') === 'true';
+                
+                // Immediate synchronous cleanup for reliable message deletion
                 window.addEventListener('beforeunload', (e) => {
-                    this.immediateCleanup();
-                    // For some browsers, we need to set returnValue for confirmation
-                    e.returnValue = 'Your messages will be deleted when you leave.';
-                    return 'Your messages will be deleted when you leave.';
-                });
-                
-                window.addEventListener('unload', () => this.immediateCleanup());
-                
-                document.addEventListener('visibilitychange', () => {
-                    if (document.hidden) {
-                        this.immediateCleanup();
+                    if (this.clearThreadOnExit) {
+                        this.syncClearEntireThread();
+                    } else {
+                        this.syncCleanupMessages();
                     }
                 });
                 
-                window.addEventListener('blur', () => {
-                    setTimeout(() => this.immediateCleanup(), 1000); // Delay to avoid false triggers
+                window.addEventListener('unload', () => {
+                    if (this.clearThreadOnExit) {
+                        this.syncClearEntireThread();
+                    } else {
+                        this.syncCleanupMessages();
+                    }
                 });
                 
-                window.addEventListener('pagehide', () => this.immediateCleanup());
+                document.addEventListener('visibilitychange', () => {
+                    if (document.hidden) {
+                        if (this.clearThreadOnExit) {
+                            this.syncClearEntireThread();
+                        } else {
+                            this.syncCleanupMessages();
+                        }
+                    }
+                });
+                
+                window.addEventListener('pagehide', () => {
+                    if (this.clearThreadOnExit) {
+                        this.syncClearEntireThread();
+                    } else {
+                        this.syncCleanupMessages();
+                    }
+                });
                 
                 // Check for pending cleanup on page load
-                window.addEventListener('load', () => {
-                    this.cleanupOldSessionMessages();
-                });
+                setTimeout(() => this.cleanupOldSessionMessages(), 2000);
             }
 
-            immediateCleanup() {
+            syncCleanupMessages() {
                 if (this.cleanupStarted || this.sentMessageIds.length === 0) return;
                 
                 this.cleanupStarted = true;
-                console.log('🧹 CLEANUP - Immediate cleanup starting for', this.sentMessageIds.length, 'messages');
+                console.log('🧹 SYNC CLEANUP - Deleting', this.sentMessageIds.length, 'messages immediately');
                 
-                // Store messages to delete in localStorage for reliable cleanup
+                // Store cleanup data for backup
                 const cleanupData = {
-                    messageIds: [...this.sentMessageIds], // Create a copy
+                    messageIds: [...this.sentMessageIds],
                     locationKey: this.locationKey,
                     timestamp: Date.now()
                 };
                 localStorage.setItem('pendingCleanup', JSON.stringify(cleanupData));
                 
-                // Use sendBeacon for reliable cleanup on page unload
-                if (navigator.sendBeacon) {
-                    this.cleanupWithBeacon();
-                } else {
-                    // Fallback to immediate async cleanup
-                    this.performCleanup(this.sentMessageIds);
-                }
+                // Perform immediate synchronous cleanup
+                this.deleteMessagesSync();
             }
             
-            cleanupWithBeacon() {
-                // Use sendBeacon to reliably send cleanup request
+            deleteMessagesSync() {
+                // Use XMLHttpRequest for synchronous cleanup during page unload
                 try {
-                    const cleanupData = {
-                        action: 'cleanup',
-                        messageIds: this.sentMessageIds,
-                        locationKey: this.locationKey
-                    };
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('GET', `${this.firebaseUrl}/proximity/${this.locationKey}.json`, false); // false = synchronous
+                    xhr.send();
                     
-                    // Since we can't use sendBeacon with Firebase directly, store for next session
-                    console.log('📡 BEACON CLEANUP - Scheduled cleanup for next session');
+                    if (xhr.status === 200) {
+                        const data = JSON.parse(xhr.responseText);
+                        if (data) {
+                            for (const [key, message] of Object.entries(data)) {
+                                if (this.sentMessageIds.includes(message.id)) {
+                                    const deleteXhr = new XMLHttpRequest();
+                                    deleteXhr.open('DELETE', `${this.firebaseUrl}/proximity/${this.locationKey}/${key}.json`, false);
+                                    deleteXhr.send();
+                                    console.log('🗑️ DELETED SYNC:', message.id);
+                                }
+                            }
+                        }
+                    }
                     
-                    // Mark messages for immediate deletion
-                    this.performCleanup(this.sentMessageIds);
+                    // Clear localStorage after successful cleanup
+                    localStorage.removeItem('pendingCleanup');
+                    console.log('✅ SYNC CLEANUP COMPLETE');
+                    
+                    // Show cleanup notification
+                    this.showCleanupNotification();
                 } catch (error) {
-                    console.error('Beacon cleanup failed:', error);
+                    console.error('Sync cleanup failed:', error);
+                    // Keep data in localStorage for async cleanup
                 }
             }
 
             async performCleanup(messageIds) {
                 try {
-                    // Delete each message sent by this user
-                    for (const messageId of messageIds) {
-                        try {
-                            // Find and delete the message from Firebase
-                            const response = await fetch(`${this.firebaseUrl}/proximity/${this.locationKey}.json`);
-                            if (response.ok) {
-                                const data = await response.json();
-                                if (data) {
-                                    for (const [key, message] of Object.entries(data)) {
-                                        if (message.id === messageId) {
-                                            await fetch(`${this.firebaseUrl}/proximity/${this.locationKey}/${key}.json`, {
-                                                method: 'DELETE'
-                                            });
-                                            console.log('🗑️ DELETED - Message:', messageId);
-                                            break;
-                                        }
-                                    }
+                    console.log('🔄 ASYNC CLEANUP - Starting for', messageIds.length, 'messages');
+                    const response = await fetch(`${this.firebaseUrl}/proximity/${this.locationKey}.json`);
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data) {
+                            const deletePromises = [];
+                            for (const [key, message] of Object.entries(data)) {
+                                if (messageIds.includes(message.id)) {
+                                    deletePromises.push(
+                                        fetch(`${this.firebaseUrl}/proximity/${this.locationKey}/${key}.json`, {
+                                            method: 'DELETE'
+                                        }).then(() => console.log('🗑️ DELETED ASYNC:', message.id))
+                                    );
                                 }
                             }
-                        } catch (error) {
-                            console.error('Failed to delete message:', messageId, error);
+                            
+                            await Promise.all(deletePromises);
+                            console.log('✅ ASYNC CLEANUP COMPLETE');
+                            localStorage.removeItem('pendingCleanup');
                         }
                     }
-                    console.log('✅ CLEANUP COMPLETE - All user messages deleted');
-                    // Clear the pending cleanup data
-                    localStorage.removeItem('pendingCleanup');
                 } catch (error) {
-                    console.error('Cleanup error:', error);
+                    console.error('Async cleanup error:', error);
                 }
             }
 
@@ -1705,7 +1796,7 @@
                     this.locationInfo.innerHTML = `
                         <span class="status-indicator"></span>
                         ${locationText}
-                        <span id="autoRefreshIndicator" class="auto-refresh-indicator"><strong>Auto-refresh: 1min</strong></span>
+                        <span id="autoRefreshIndicator" class="auto-refresh-indicator"><strong>Auto-refresh: 20sec</strong></span>
                         <div class="user-info">Chatting as: ${this.username} • Reputation: ${this.userReputation}</div>
                     `;
                 }
@@ -1801,6 +1892,115 @@
                 locationText += ` • ${this.radius}m radius • Session: ${this.sessionMessages}/${this.maxSessionMessages}`;
                 
                 return locationText;
+            }
+
+            showCleanupNotification() {
+                try {
+                    const notification = document.createElement('div');
+                    notification.className = 'cleanup-notification';
+                    notification.style.cssText = `
+                        position: fixed;
+                        top: 20px;
+                        right: 20px;
+                        background: linear-gradient(135deg, #00b894, #00a085);
+                        color: white;
+                        padding: 12px 20px;
+                        border-radius: 8px;
+                        font-size: 14px;
+                        font-weight: 500;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                        z-index: 10000;
+                        opacity: 0;
+                        transform: translateX(100%);
+                        transition: all 0.3s ease;
+                    `;
+                    notification.innerHTML = '🧹 Messages cleaned up successfully';
+                    
+                    document.body.appendChild(notification);
+                    
+                    // Animate in
+                    setTimeout(() => {
+                        notification.style.opacity = '1';
+                        notification.style.transform = 'translateX(0)';
+                    }, 100);
+                    
+                    // Animate out and remove
+                    setTimeout(() => {
+                        notification.style.opacity = '0';
+                        notification.style.transform = 'translateX(100%)';
+                        setTimeout(() => notification.remove(), 300);
+                    }, 3000);
+                } catch (error) {
+                    // Ignore notification errors
+                }
+            }
+
+            // 🧹 THREAD CLEARING FUNCTIONALITY
+
+            syncClearEntireThread() {
+                if (this.threadClearStarted || !this.locationKey) return;
+                
+                this.threadClearStarted = true;
+                console.log('🧹 CLEARING ENTIRE THREAD for location:', this.locationKey);
+                
+                try {
+                    // Delete entire location thread synchronously
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('DELETE', `${this.firebaseUrl}/proximity/${this.locationKey}.json`, false); // false = synchronous
+                    xhr.send();
+                    
+                    if (xhr.status === 200) {
+                        console.log('✅ ENTIRE THREAD CLEARED');
+                        this.showThreadClearNotification();
+                    } else {
+                        console.error('Failed to clear thread:', xhr.status);
+                    }
+                } catch (error) {
+                    console.error('Sync thread clear failed:', error);
+                }
+            }
+            
+            showThreadClearNotification() {
+                try {
+                    if (!document.hidden) {
+                        const notification = document.createElement('div');
+                        notification.className = 'thread-clear-notification';
+                        notification.style.cssText = `
+                            position: fixed;
+                            top: 20px;
+                            right: 20px;
+                            background: linear-gradient(135deg, #dc3545, #c82333);
+                            color: white;
+                            padding: 12px 20px;
+                            border-radius: 8px;
+                            font-size: 14px;
+                            font-weight: 500;
+                            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                            z-index: 10000;
+                            opacity: 0;
+                            transform: translateX(100%);
+                            transition: all 0.3s ease;
+                        `;
+                        notification.innerHTML = '🧹 Entire chat thread cleared';
+                        
+                        document.body.appendChild(notification);
+                        
+                        // Animate in
+                        setTimeout(() => {
+                            notification.style.opacity = '1';
+                            notification.style.transform = 'translateX(0)';
+                        }, 100);
+                        
+                        // Animate out and remove
+                        setTimeout(() => {
+                            notification.style.opacity = '0';
+                            notification.style.transform = 'translateX(100%)';
+                            setTimeout(() => notification.remove(), 300);
+                        }, 3000);
+                    }
+                } catch (error) {
+                    console.error('Error showing thread clear notification:', error);
+                }
             }
         }
 
