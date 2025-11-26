@@ -853,7 +853,9 @@
                 
                 // Add double-click on clear button for manual thread clearing testing
                 this.clearBtn.addEventListener('dblclick', () => {
-                    console.log('🧪 MANUAL THREAD CLEAR TEST - Clearing entire thread');
+                    console.log('🧪 MANUAL THREAD CLEAR TEST - Double-click detected');
+                    console.log('🧪 Current locationKey:', this.locationKey);
+                    console.log('🧪 Current threadClearStarted:', this.threadClearStarted);
                     // Reset the flag to allow manual testing
                     this.threadClearStarted = false;
                     this.syncClearEntireThread();
@@ -1059,6 +1061,7 @@
                 
                 console.log(`🏘️ MULTI-BUCKET - Generated ${locationKeys.length} location keys for 3x3 search`);
                 console.log(`🏘️ CENTER BUCKET - ${locationKeys[4]} (index 4 = center of 3x3 grid)`);
+                console.log(`🏘️ ALL BUCKETS:`, locationKeys);
                 
                 return locationKeys;
             }
@@ -1231,6 +1234,7 @@
 
                 // Send to Firebase
                 try {
+                    console.log('📤 SENDING TO BUCKET:', this.locationKey);
                     const response = await fetch(`${this.firebaseUrl}/proximity/${this.locationKey}.json`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -1240,6 +1244,8 @@
                     if (!response.ok) {
                         throw new Error('Failed to send message');
                     }
+                    
+                    console.log('✅ MESSAGE SENT successfully to bucket:', this.locationKey);
                     
                     // Increase reputation for successful message
                     if (this.userReputation < 1000) {
@@ -1670,10 +1676,13 @@
             }
 
             setupCleanupListeners() {
+                console.log('🎧 SETTING UP CLEANUP LISTENERS - Thread clearing events');
+                
                 // Always clear entire thread on exit - default behavior
                 window.addEventListener('beforeunload', (e) => {
                     console.log('🚪 BEFOREUNLOAD EVENT - Triggering thread clear');
                     this.syncClearEntireThread();
+                    // Don't prevent default - let the page close
                 });
                 
                 window.addEventListener('unload', () => {
@@ -1682,16 +1691,28 @@
                 });
                 
                 document.addEventListener('visibilitychange', () => {
+                    console.log('👁️ VISIBILITY CHANGE EVENT - Page visibility:', document.hidden ? 'hidden' : 'visible');
                     if (document.hidden) {
                         console.log('👁️ VISIBILITY CHANGE - Page hidden, triggering thread clear');
                         this.syncClearEntireThread();
                     }
                 });
                 
-                window.addEventListener('pagehide', () => {
-                    console.log('🚪 PAGEHIDE EVENT - Triggering thread clear');
+                window.addEventListener('pagehide', (e) => {
+                    console.log('🚪 PAGEHIDE EVENT - Triggering thread clear, persisted:', e.persisted);
                     this.syncClearEntireThread();
                 });
+                
+                // Additional keyboard shortcut detection
+                document.addEventListener('keydown', (e) => {
+                    // Detect Cmd+W (Mac) or Ctrl+W (Windows/Linux) to close tab
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
+                        console.log('⌨️ KEYBOARD SHORTCUT - Tab close detected (Cmd/Ctrl+W)');
+                        this.syncClearEntireThread();
+                    }
+                });
+                
+                console.log('✅ CLEANUP LISTENERS ATTACHED - Ready for thread clearing');
                 
                 // Check for pending cleanup on page load
                 setTimeout(() => this.cleanupOldSessionMessages(), 2000);
