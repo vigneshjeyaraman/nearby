@@ -742,16 +742,7 @@
                 </div>
             </div>
             
-            <div class="setting-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="clearThreadToggle">
-                    <span class="checkbox-custom"></span>
-                    Clear entire chat thread when I leave
-                </label>
-                <div class="setting-warning">
-                    ⚠️ This will delete ALL messages in this location for everyone when you close the tab!
-                </div>
-            </div>
+
             
             <div class="settings-buttons">
                 <button id="saveSettings" class="settings-btn-action primary">Save Changes</button>
@@ -835,7 +826,6 @@
                 this.usernameInput = document.getElementById('usernameInput');
                 this.radiusSlider = document.getElementById('radiusSlider');
                 this.radiusDisplay = document.getElementById('radiusDisplay');
-                this.clearThreadToggle = document.getElementById('clearThreadToggle');
                 this.saveSettings = document.getElementById('saveSettings');
                 this.cancelSettings = document.getElementById('cancelSettings');
                 
@@ -1053,7 +1043,6 @@
             showSettingsModal() {
                 this.usernameInput.value = this.username;
                 this.radiusSlider.value = this.radius;
-                this.clearThreadToggle.checked = localStorage.getItem('clearThreadOnExit') === 'true';
                 this.updateRadiusDisplay();
                 this.settingsModal.style.display = 'flex';
             }
@@ -1090,10 +1079,8 @@
                 // Update settings
                 this.username = newUsername;
                 this.radius = newRadius;
-                this.clearThreadOnExit = this.clearThreadToggle.checked;
                 this.saveUsername(newUsername);
                 this.saveRadius(newRadius);
-                localStorage.setItem('clearThreadOnExit', this.clearThreadOnExit.toString());
                 
                 // Update location key if radius changed
                 if (this.location) {
@@ -1610,42 +1597,23 @@
             }
 
             setupCleanupListeners() {
-                // Load cleanup preferences
-                this.clearThreadOnExit = localStorage.getItem('clearThreadOnExit') === 'true';
-                
-                // Immediate synchronous cleanup for reliable message deletion
+                // Always clear entire thread on exit - default behavior
                 window.addEventListener('beforeunload', (e) => {
-                    if (this.clearThreadOnExit) {
-                        this.syncClearEntireThread();
-                    } else {
-                        this.syncCleanupMessages();
-                    }
+                    this.syncClearEntireThread();
                 });
                 
                 window.addEventListener('unload', () => {
-                    if (this.clearThreadOnExit) {
-                        this.syncClearEntireThread();
-                    } else {
-                        this.syncCleanupMessages();
-                    }
+                    this.syncClearEntireThread();
                 });
                 
                 document.addEventListener('visibilitychange', () => {
                     if (document.hidden) {
-                        if (this.clearThreadOnExit) {
-                            this.syncClearEntireThread();
-                        } else {
-                            this.syncCleanupMessages();
-                        }
+                        this.syncClearEntireThread();
                     }
                 });
                 
                 window.addEventListener('pagehide', () => {
-                    if (this.clearThreadOnExit) {
-                        this.syncClearEntireThread();
-                    } else {
-                        this.syncCleanupMessages();
-                    }
+                    this.syncClearEntireThread();
                 });
                 
                 // Check for pending cleanup on page load
@@ -1941,7 +1909,7 @@
                 if (this.threadClearStarted || !this.locationKey) return;
                 
                 this.threadClearStarted = true;
-                console.log('🧹 CLEARING ENTIRE THREAD for location:', this.locationKey);
+                console.log('🧹 CLEARING ENTIRE THREAD for location:', this.locationKey, '(default behavior)');
                 
                 try {
                     // Delete entire location thread synchronously
