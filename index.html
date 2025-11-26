@@ -1023,6 +1023,41 @@
                 return `area_${locationId.replace(/\./g, '_').replace(/-/g, 'n')}_r${this.radius}`;
             }
 
+            // 🏘️ MULTI-BUCKET PROXIMITY SEARCH - Generate 3x3 grid of nearby location keys
+            getNearbyLocationKeys(lat, lon, radius) {
+                let precision;
+                
+                if (radius <= 100) {
+                    precision = 0.001; // ~100m grid
+                } else if (radius <= 1000) {
+                    precision = 0.005; // ~500m grid
+                } else {
+                    precision = 0.01; // ~1km grid
+                }
+                
+                const baseLat = Math.floor(lat / precision) * precision;
+                const baseLon = Math.floor(lon / precision) * precision;
+                
+                const locationKeys = [];
+                
+                // Generate 3x3 grid: current cell + 8 neighbors
+                for (let latOffset = -1; latOffset <= 1; latOffset++) {
+                    for (let lonOffset = -1; lonOffset <= 1; lonOffset++) {
+                        const gridLat = baseLat + (latOffset * precision);
+                        const gridLon = baseLon + (lonOffset * precision);
+                        
+                        const locationId = `${gridLat.toFixed(3)}_${gridLon.toFixed(3)}`;
+                        const locationKey = `area_${locationId.replace(/\./g, '_').replace(/-/g, 'n')}_r${radius}`;
+                        locationKeys.push(locationKey);
+                    }
+                }
+                
+                console.log(`🏘️ MULTI-BUCKET - Generated ${locationKeys.length} location keys for 3x3 search`);
+                console.log(`🏘️ CENTER BUCKET - ${locationKeys[4]} (index 4 = center of 3x3 grid)`);
+                
+                return locationKeys;
+            }
+
             loadUsername() {
                 return localStorage.getItem('proximityChat_username');
             }
@@ -1112,7 +1147,7 @@
                 this.locationInfo.innerHTML = `
                     <span class="status-indicator"></span>
                     ${locationText}
-                    <span id="autoRefreshIndicator" class="auto-refresh-indicator"><strong>Auto-refresh: 20sec</strong></span>
+                    <span id="autoRefreshIndicator" class="auto-refresh-indicator"><strong>Auto-refresh: 20sec (9-bucket)</strong></span>
                     <div class="user-info">Chatting as: ${this.username} • Reputation: ${this.userReputation}</div>
                 `;
             }
@@ -1215,30 +1250,54 @@
 
             async loadExistingMessages() {
                 try {
-                    const response = await fetch(`${this.firebaseUrl}/proximity/${this.locationKey}.json`);
+                    // 🏘️ MULTI-BUCKET SEARCH - Search all 9 location buckets
+                    const nearbyKeys = this.getNearbyLocationKeys(this.location.lat, this.location.lon, this.radius);
+                    const allMessages = new Map(); // Use Map to avoid duplicates
                     
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data) {
-                            // Get recent messages from last hour
-                            const oneHourAgo = Date.now() - (60 * 60 * 1000);
-                            
-                            const messages = Object.entries(data)
-                                .map(([key, msg]) => msg)
-                                .filter(msg => msg.timestamp > oneHourAgo)
-                                .sort((a, b) => a.timestamp - b.timestamp);
-                            
-                            console.log("Nothing important");
-                            
-                            messages.forEach(msg => {
-                                if (msg.location && this.isWithinRange(msg.location)) {
-                                    this.addMessageToUI(msg, msg.userId === this.userId);
-                                } else {
-                                    console.log("Nothing important");
+                    console.log(`🔍 MULTI-BUCKET SEARCH - Checking ${nearbyKeys.length} location buckets`);
+                    
+                    // Search all nearby location buckets
+                    const searchPromises = nearbyKeys.map(async (locationKey, index) => {
+                        try {
+                            const response = await fetch(`${this.firebaseUrl}/proximity/${locationKey}.json`);
+                            if (response.ok) {
+                                const data = await response.json();
+                                if (data) {
+                                    let bucketMessages = 0;
+                                    Object.entries(data).forEach(([key, msg]) => {
+                                        if (!allMessages.has(msg.id)) {
+                                            allMessages.set(msg.id, msg);
+                                            bucketMessages++;
+                                        }
+                                    });
+                                    if (bucketMessages > 0) {
+                                        console.log(`📦 BUCKET ${index + 1}/9 - Found ${bucketMessages} messages in ${locationKey}`);
+                                    }
                                 }
-                            });
+                            }
+                        } catch (error) {
+                            console.log(`⚠️ BUCKET ${index + 1}/9 - Error loading ${locationKey}:`, error.message);
                         }
-                    }
+                    });
+                    
+                    // Wait for all bucket searches to complete
+                    await Promise.all(searchPromises);
+                    
+                    // Process all found messages
+                    const oneHourAgo = Date.now() - (60 * 60 * 1000);
+                    const recentMessages = Array.from(allMessages.values())
+                        .filter(msg => msg.timestamp > oneHourAgo)
+                        .sort((a, b) => a.timestamp - b.timestamp);
+                    
+                    console.log(`✅ MULTI-BUCKET COMPLETE - Found ${recentMessages.length} recent messages across ${nearbyKeys.length} buckets`);
+                    
+                    recentMessages.forEach(msg => {
+                        if (msg.location && this.isWithinRange(msg.location)) {
+                            this.addMessageToUI(msg, msg.userId === this.userId);
+                        } else {
+                            console.log(`🚫 FILTERED OUT - Message from ${this.calculateDistance(this.location.lat, this.location.lon, msg.location.lat, msg.location.lon).toFixed(0)}m away (outside ${this.radius}m radius)`);
+                        }
+                    });
                 } catch (error) {
                     console.error('Error loading messages:', error);
                 }
@@ -1248,32 +1307,41 @@
                 if (!this.locationKey) return;
 
                 try {
-                    // Get all messages without ordering (no index required)
-                    const response = await fetch(`${this.firebaseUrl}/proximity/${this.locationKey}.json`);
+                    // 🏘️ MULTI-BUCKET POLLING - Check all 9 buckets for new messages
+                    const nearbyKeys = this.getNearbyLocationKeys(this.location.lat, this.location.lon, this.radius);
+                    let totalNewMessages = 0;
                     
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data) {
-                            let newMessagesCount = 0;
-                            Object.entries(data).forEach(([key, message]) => {
-                                // Skip our own messages, old messages, and check location proximity
-                                if (message.userId !== this.userId && 
-                                    message.timestamp > this.lastMessageTime) {
-                                    
-                                    if (message.location && this.isWithinRange(message.location)) {
-                                        this.addMessageToUI(message, false);
-                                        this.lastMessageTime = Math.max(this.lastMessageTime, message.timestamp);
-                                        newMessagesCount++;
-                                    } else {
-                                        console.log("Nothing important");
-                                    }
+                    const pollPromises = nearbyKeys.map(async (locationKey, index) => {
+                        try {
+                            const response = await fetch(`${this.firebaseUrl}/proximity/${locationKey}.json`);
+                            if (response.ok) {
+                                const data = await response.json();
+                                if (data) {
+                                    let bucketNewMessages = 0;
+                                    Object.entries(data).forEach(([key, message]) => {
+                                        // Skip our own messages, old messages, and check location proximity
+                                        if (message.userId !== this.userId && 
+                                            message.timestamp > this.lastMessageTime) {
+                                            
+                                            if (message.location && this.isWithinRange(message.location)) {
+                                                this.addMessageToUI(message, false);
+                                                this.lastMessageTime = Math.max(this.lastMessageTime, message.timestamp);
+                                                bucketNewMessages++;
+                                                totalNewMessages++;
+                                            }
+                                        }
+                                    });
                                 }
-                            });
-                            
-                            if (newMessagesCount > 0) {
-                                console.log("Nothing important");
                             }
+                        } catch (error) {
+                            // Silently handle individual bucket errors during polling
                         }
+                    });
+                    
+                    await Promise.all(pollPromises);
+                    
+                    if (totalNewMessages > 0) {
+                        console.log(`📬 MULTI-BUCKET POLL - Found ${totalNewMessages} new messages across ${nearbyKeys.length} buckets`);
                     }
                 } catch (error) {
                     console.error('Polling error:', error);
@@ -1445,7 +1513,7 @@
                 const indicator = document.getElementById('autoRefreshIndicator');
                 if (indicator) {
                     indicator.classList.add('refreshing');
-                    indicator.textContent = '🔄 Refreshing...';
+                    indicator.textContent = '🔄 Multi-bucket refresh...';
                 }
                 
                 try {
@@ -1459,20 +1527,20 @@
                     if (newCount > currentCount) {
                         const newMessages = newCount - currentCount;
                         if (indicator) {
-                            indicator.textContent = `✨ ${newMessages} new message${newMessages > 1 ? 's' : ''}`;
+                            indicator.textContent = `✨ ${newMessages} new message${newMessages > 1 ? 's' : ''} (9-bucket search)`;
                             setTimeout(() => {
                                 if (indicator) {
-                                    indicator.textContent = 'Auto-refresh: 20sec';
+                                    indicator.textContent = 'Auto-refresh: 20sec (9-bucket)';
                                     indicator.classList.remove('refreshing');
                                 }
                             }, 2000);
                         }
                     } else {
                         if (indicator) {
-                            indicator.textContent = '✓ Up to date';
+                            indicator.textContent = '✓ Up to date (9-bucket search)';
                             setTimeout(() => {
                                 if (indicator) {
-                                    indicator.textContent = 'Auto-refresh: 20sec';
+                                    indicator.textContent = 'Auto-refresh: 20sec (9-bucket)';
                                     indicator.classList.remove('refreshing');
                                 }
                             }, 1500);
@@ -1484,7 +1552,7 @@
                         indicator.textContent = '⚠️ Refresh failed';
                         setTimeout(() => {
                             if (indicator) {
-                                indicator.textContent = 'Auto-refresh: 20sec';
+                                indicator.textContent = 'Auto-refresh: 20sec (9-bucket)';
                                 indicator.classList.remove('refreshing');
                             }
                         }, 2000);
