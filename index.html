@@ -847,9 +847,6 @@
                 
                 // Add double-click on clear button for manual user message clearing testing
                 this.clearBtn.addEventListener('dblclick', () => {
-                    console.log('🧪 MANUAL USER MESSAGE CLEAR TEST - Double-click detected');
-                    console.log('🧪 Current locationKey:', this.locationKey);
-                    console.log('🧪 Messages to clear:', this.sentMessageIds.length);
                     this.asyncClearUserMessages();
                 });
                 
@@ -908,12 +905,6 @@
                     };
 
                     // Debug location source information
-                    console.log("Nothing important");
-                    console.log("Nothing important");
-                    console.log("Nothing important");
-                    console.log("Nothing important");
-                    console.log("Nothing important");
-                    
                     // Check if we can get IP-based location for comparison
                     this.checkIPLocation();
 
@@ -968,22 +959,14 @@
 
             async checkIPLocation() {
                 try {
-                    console.log("Nothing important");
                     const response = await fetch('https://ipapi.co/json/');
                     const ipData = await response.json();
-                    
-                    console.log("Nothing important");
-                    console.log("Nothing important");
-                    console.log("Nothing important");
-                    console.log("Nothing important");
-                    console.log("Nothing important");
                     
                     if (this.location) {
                         const distance = this.calculateDistance(
                             this.location.lat, this.location.lon,
                             ipData.latitude, ipData.longitude
                         );
-                        console.log("Nothing important");
                         
                         if (distance > 1000) {
                             console.log("Nothing important");
@@ -1005,9 +988,6 @@
                 
                 // Create location identifier with balanced precision
                 const locationId = `${gridLat.toFixed(3)}_${gridLon.toFixed(3)}`;
-                
-                console.log(`🗝️ LOCATION KEY - Input: ${lat.toFixed(6)}, ${lon.toFixed(6)}`);
-                console.log(`🎯 SIMPLIFIED KEY - Grid: ${locationId}, Fixed precision for all users, Radius: ${this.radius}m`);
                 
                 return `area_${locationId.replace(/\./g, '_').replace(/-/g, 'n')}_r${this.radius}`;
             }
@@ -1050,10 +1030,6 @@
                         }
                     }
                 });
-                
-                console.log(`🎯 SIMPLIFIED GRID - Generated ${locationKeys.length} location keys for 3x3 grid search`);
-                console.log(`🎯 USING FIXED RADIUS:`, radiusesToSearch[0], 'm');
-                console.log(`🎯 TOTAL BUCKETS TO CHECK:`, locationKeys.length);
                 
                 return locationKeys;
             }
@@ -1157,23 +1133,35 @@
                 // 🔒 SECURITY CHECKS
                 if (!this.passesSecurityChecks(content)) return;
 
+                // Ensure message meets Firebase rules: message field with 1-500 chars
+                const trimmedContent = content.trim();
+                if (trimmedContent.length === 0) {
+                    this.showError('Message cannot be empty.');
+                    return;
+                }
+                if (trimmedContent.length > 500) {
+                    this.showError('Message too long! Maximum 500 characters allowed.');
+                    return;
+                }
+
+                // Create a minimal message object that strictly follows Firebase rules
                 const message = {
+                    message: trimmedContent, // Firebase rules require this field with 1-500 chars
+                    username: this.username || 'Anonymous',
+                    timestamp: Date.now(),
+                    // Additional fields for internal use
                     id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-                    content: content,
-                    username: this.username,
+                    content: trimmedContent, // Keep for backward compatibility
                     userId: this.userId,
                     deviceId: this.deviceId,
                     location: this.location,
-                    timestamp: Date.now(),
                     reputation: this.userReputation,
                     verified: this.locationVerified,
-                    radius: this.radius, // 🤝 Include radius for mutual visibility
-                    locationName: this.locationName, // 🌍 Include location name for display
-                    country: this.country // 🌍 Include country for display
+                    radius: this.radius,
+                    locationName: this.locationName,
+                    country: this.country
                 };
 
-                console.log('📤 SENDING - Message with security metadata');
-                console.log('🔒 SECURITY - User reputation:', this.userReputation, 'Verified:', this.locationVerified);
 
                 // Add to UI immediately
                 await this.addMessageToUI(message, true);
@@ -1186,7 +1174,6 @@
                 
                 // Track this message for cleanup
                 this.sentMessageIds.push(message.id);
-                console.log('📝 TRACKING MESSAGE for cleanup:', message.id, '- Total tracked:', this.sentMessageIds.length);
                 
                 // Update UI counters
                 this.updateLocationDisplay();
@@ -1194,7 +1181,6 @@
 
                 // Send to Firebase
                 try {
-                    console.log('📤 SENDING TO BUCKET:', this.locationKey);
                     const response = await fetch(`${this.firebaseUrl}/proximity/${this.locationKey}.json`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -1202,10 +1188,36 @@
                     });
 
                     if (!response.ok) {
-                        throw new Error('Failed to send message');
+                        const errorText = await response.text();
+                        
+                        // If 401 (unauthorized), try with minimal data structure
+                        if (response.status === 401) {
+                            const minimalMessage = {
+                                message: trimmedContent,
+                                username: this.username || 'Anonymous',
+                                timestamp: Date.now()
+                            };
+                            
+                            const retryResponse = await fetch(`${this.firebaseUrl}/proximity/${this.locationKey}.json`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(minimalMessage)
+                            });
+                            
+                            if (!retryResponse.ok) {
+                                const retryErrorText = await retryResponse.text();
+                                console.error('❌ RETRY FAILED:', retryResponse.status, retryErrorText);
+                                throw new Error(`Firebase rules error: ${retryResponse.status} - ${retryErrorText}`);
+                            } else {
+                                // Update the message object with minimal data for UI consistency
+                                message.message = minimalMessage.message;
+                                message.username = minimalMessage.username;
+                                message.timestamp = minimalMessage.timestamp;
+                            }
+                        } else {
+                            throw new Error(`Failed to send message: ${response.status} - ${errorText}`);
+                        }
                     }
-                    
-                    console.log('✅ MESSAGE SENT successfully to bucket:', this.locationKey);
                     
                     // Increase reputation for successful message
                     if (this.userReputation < 1000) {
@@ -1224,8 +1236,6 @@
                     // 🎯 SIMPLIFIED SEARCH - Search local area with 3km radius
                     const nearbyKeys = this.getNearbyLocationKeys(this.location.lat, this.location.lon, this.radius);
                     const allMessages = new Map(); // Use Map to avoid duplicates
-                    
-                    console.log(`🎯 SIMPLIFIED SEARCH - Checking ${nearbyKeys.length} location buckets (3km radius)`);                    
                     
                     // Search all nearby location buckets
                     const searchPromises = nearbyKeys.map(async (locationKey, index) => {
@@ -1259,8 +1269,6 @@
                     const recentMessages = Array.from(allMessages.values())
                         .filter(msg => msg.timestamp > oneHourAgo)
                         .sort((a, b) => a.timestamp - b.timestamp);
-                    
-                    console.log(`✅ MULTI-BUCKET COMPLETE - Found ${recentMessages.length} recent messages across ${nearbyKeys.length} buckets`);
                     
                     for (const msg of recentMessages) {
                         if (msg.location) {
@@ -1336,12 +1344,9 @@
                 // Emergency failsafe - if distance > 100km, definitely reject
                 const EMERGENCY_MAX_DISTANCE = 100000; // 100km
                 if (distance > EMERGENCY_MAX_DISTANCE) {
-                    console.log(`🚫 EMERGENCY FILTER - Message from ${distance.toFixed(0)}m away (>100km limit)`);
                     return false;
                 }
                 
-                // 🎯 SIMPLIFIED - No distance filtering, everyone sees everyone in the same grid
-                console.log(`✅ SIMPLIFIED RANGE - Distance: ${distance.toFixed(0)}m (no filtering, showing all local messages)`);
                 return true;
             }
 
@@ -1409,7 +1414,7 @@
                         <strong>${isOwn ? 'You' : message.username}</strong> 
                         <strong><span style="color: #4b3791; font-size: 0.85em;">• ${locationInfo}${distanceDisplay} • ${time}</span></strong>
                     </div>
-                    <div class="message-content">${this.escapeHtml(message.content)}</div>
+                    <div class="message-content">${this.escapeHtml(message.message || message.content)}</div>
                 `;
                 
                 this.messagesContainer.appendChild(messageEl);
@@ -1641,6 +1646,11 @@
             passesSecurityChecks(content) {
                 const now = Date.now();
                 
+                // Content filtering check - must be first to prevent inappropriate content
+                if (!this.passesContentFilter(content)) {
+                    return false;
+                }
+                
                 // Session message limit check
                 if (this.sessionMessages >= this.maxSessionMessages) {
                     this.showError(`Session limit reached! You can only send ${this.maxSessionMessages} messages per session.`);
@@ -1676,7 +1686,86 @@
                     return false;
                 }
                 
-                console.log('🔒 SECURITY PASSED - Session:', this.sessionMessages + '/' + this.maxSessionMessages, 'Words:', wordCount + '/' + this.maxWordCount, 'Reputation:', this.userReputation);
+                return true;
+            }
+
+            passesContentFilter(content) {
+                const text = content.toLowerCase().trim();
+                
+                // Define blocked content categories
+                const threats = [
+                    'kill', 'murder', 'die', 'death', 'hurt', 'harm', 'attack', 'beat up', 'violence',
+                    'shoot', 'stab', 'gun', 'weapon', 'bomb', 'explosive', 'terrorist', 'threat',
+                    'kidnap', 'abuse', 'assault', 'rape', 'molest'
+                ];
+                
+                const sexual = [
+                    'sex', 'porn', 'nude', 'naked', 'boobs', 'penis', 'vagina', 'orgasm', 'masturbate',
+                    'horny', 'aroused', 'seduce', 'escort', 'prostitute', 'hookup', 'nsfw',
+                    'xxx', 'adult', 'erotic', 'fetish', 'kinky', 'slutty', 'whore'
+                ];
+                
+                const drugs = [
+                    'weed', 'marijuana', 'cannabis', 'cocaine', 'heroin', 'meth', 'crack', 'lsd',
+                    'ecstasy', 'molly', 'dealer', 'drug', 'high', 'stoned', 'junkie', 'addict',
+                    'pills', 'prescription', 'xanax', 'opioid', 'fentanyl', 'ketamine',
+                    'mushrooms', 'acid', 'dope', 'blow', 'snow', 'ice'
+                ];
+                
+                // Check for blocked words with word boundaries to avoid false positives
+                const blockedCategories = [
+                    { words: threats, category: 'violent or threatening' },
+                    { words: sexual, category: 'sexual or inappropriate' },
+                    { words: drugs, category: 'drug-related' }
+                ];
+                
+                for (const category of blockedCategories) {
+                    for (const word of category.words) {
+                        // Use word boundaries to match whole words and common variations
+                        const patterns = [
+                            new RegExp(`\\b${word}\\b`, 'i'),
+                            new RegExp(`\\b${word}s\\b`, 'i'), // plural
+                            new RegExp(`\\b${word}ing\\b`, 'i'), // -ing form
+                            new RegExp(`\\b${word}ed\\b`, 'i') // -ed form
+                        ];
+                        
+                        if (patterns.some(pattern => pattern.test(text))) {
+                            this.showError(`Message blocked: ${category.category} content is not allowed.`);
+                            
+                            // Increase suspicious activity for repeated violations
+                            this.suspiciousActivity++;
+                            if (this.suspiciousActivity > 3) {
+                                this.userReputation = Math.max(0, this.userReputation - 10);
+                                this.saveReputation(this.userReputation);
+                            }
+                            
+                            return false;
+                        }
+                    }
+                }
+                
+                // Check for common leetspeak/symbol substitutions
+                const sanitized = text
+                    .replace(/[@4]/g, 'a')
+                    .replace(/[3]/g, 'e')
+                    .replace(/[1!]/g, 'i')
+                    .replace(/[0]/g, 'o')
+                    .replace(/[5$]/g, 's')
+                    .replace(/[7]/g, 't')
+                    .replace(/[+]/g, 't');
+                
+                // Re-check with sanitized text
+                for (const category of blockedCategories) {
+                    for (const word of category.words) {
+                        if (sanitized.includes(word)) {
+                            this.showError(`Message blocked: ${category.category} content is not allowed.`);
+                            this.suspiciousActivity++;
+                            return false;
+                        }
+                    }
+                }
+                
+                console.log('✅ CONTENT FILTER PASSED');
                 return true;
             }
 
@@ -1722,7 +1811,6 @@
             }
 
             setupCleanupListeners() {
-                console.log('🎧 SETTING UP CLEANUP LISTENERS - Thread clearing events');
                 
                 // Store cleanup info for emergency cleanup
                 const storeCleanupInfo = () => {
@@ -1742,28 +1830,23 @@
                 
                 // Primary cleanup using beforeunload with sendBeacon fallback
                 window.addEventListener('beforeunload', (e) => {
-                    console.log('🚪 BEFOREUNLOAD EVENT - Triggering thread clear');
                     storeCleanupInfo();
                     this.performEmergencyCleanup();
                 });
                 
                 // Fallback cleanup using pagehide (more reliable on mobile)
                 window.addEventListener('pagehide', (e) => {
-                    console.log('🚪 PAGEHIDE EVENT - Triggering thread clear, persisted:', e.persisted);
                     storeCleanupInfo();
                     this.performEmergencyCleanup();
                 });
                 
                 // Detect page visibility changes but DON'T cleanup on tab switching
                 document.addEventListener('visibilitychange', () => {
-                    console.log('👁️ VISIBILITY CHANGE - Page hidden:', document.hidden);
                     if (document.hidden) {
-                        console.log('👁️ VISIBILITY - Tab/window hidden (but not cleaning up - could be tab switch)');
                         // Only store cleanup info, don't actually cleanup
                         // This prevents cleanup on tab switches while still preparing for real page closes
                         storeCleanupInfo();
                     } else {
-                        console.log('👁️ VISIBILITY - Tab/window visible again');
                         // Clear any stored cleanup info since we're back
                         sessionStorage.removeItem('emergencyCleanup');
                     }
@@ -1773,25 +1856,20 @@
                 document.addEventListener('keydown', (e) => {
                     // Detect tab/window close shortcuts
                     if ((e.metaKey || e.ctrlKey) && (e.key === 'w' || e.key === 'W')) {
-                        console.log('⌨️ KEYBOARD SHORTCUT - Tab close detected (Cmd/Ctrl+W)');
                         storeCleanupInfo();
                         this.performEmergencyCleanup();
                     }
                     // Detect browser refresh
                     if ((e.metaKey || e.ctrlKey) && (e.key === 'r' || e.key === 'R')) {
-                        console.log('⌨️ KEYBOARD SHORTCUT - Refresh detected (Cmd/Ctrl+R)');
                         storeCleanupInfo();
                         this.performEmergencyCleanup();
                     }
                     // Detect F5 refresh
                     if (e.key === 'F5') {
-                        console.log('⌨️ KEYBOARD SHORTCUT - F5 refresh detected');
                         storeCleanupInfo();
                         this.performEmergencyCleanup();
                     }
                 });
-                
-                console.log('✅ CLEANUP LISTENERS ATTACHED - Ready for thread clearing');
                 
                 // Check for pending cleanup from previous session
                 this.checkForEmergencyCleanup();
@@ -1802,8 +1880,6 @@
                 if (this.cleanupStarted || this.sentMessageIds.length === 0) return;
                 
                 this.cleanupStarted = true;
-                console.log('🧹 SYNC CLEANUP - Deleting', this.sentMessageIds.length, 'messages immediately');
-                
                 // Store cleanup data for backup
                 const cleanupData = {
                     messageIds: [...this.sentMessageIds],
@@ -1831,7 +1907,6 @@
                                     const deleteXhr = new XMLHttpRequest();
                                     deleteXhr.open('DELETE', `${this.firebaseUrl}/proximity/${this.locationKey}/${key}.json`, false);
                                     deleteXhr.send();
-                                    console.log('🗑️ DELETED SYNC:', message.id);
                                 }
                             }
                         }
@@ -1839,7 +1914,6 @@
                     
                     // Clear localStorage after successful cleanup
                     localStorage.removeItem('pendingCleanup');
-                    console.log('✅ SYNC CLEANUP COMPLETE');
                     
                     // Show cleanup notification
                     this.showCleanupNotification();
@@ -1851,7 +1925,6 @@
 
             async performCleanup(messageIds) {
                 try {
-                    console.log('🔄 ASYNC CLEANUP - Starting for', messageIds.length, 'messages');
                     const response = await fetch(`${this.firebaseUrl}/proximity/${this.locationKey}.json`);
                     
                     if (response.ok) {
@@ -1869,7 +1942,6 @@
                             }
                             
                             await Promise.all(deletePromises);
-                            console.log('✅ ASYNC CLEANUP COMPLETE');
                             localStorage.removeItem('pendingCleanup');
                         }
                     }
@@ -1888,7 +1960,6 @@
                         
                         // If cleanup data is less than 5 minutes old, perform cleanup
                         if (timeDiff < 5 * 60 * 1000 && cleanupData.messageIds && cleanupData.messageIds.length > 0) {
-                            console.log('🔄 RESUMING USER CLEANUP - Found pending cleanup from previous session');
                             this.locationKey = cleanupData.locationKey;
                             this.sentMessageIds = cleanupData.messageIds;
                             await this.asyncClearUserMessages();
@@ -1955,8 +2026,6 @@
                     const lat = this.location.lat;
                     const lon = this.location.lon || this.location.lng;
                     
-                    console.log('🌍 Getting location info for:', lat, lon);
-                    
                     const response = await fetch(
                         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10&addressdetails=1`,
                         {
@@ -1968,7 +2037,6 @@
                     
                     if (response.ok) {
                         const data = await response.json();
-                        console.log('🏘️ Location data received:', data);
                         
                         if (data.address) {
                             this.cityName = data.address.city || 
@@ -1984,7 +2052,6 @@
                             const state = data.address.state || data.address.region || '';
                             this.locationName = state ? `${this.cityName}, ${state}` : this.cityName;
                             
-                            console.log('📍 Location resolved:', this.locationName, this.country);
                         }
                     } else {
                         console.warn('Failed to get location info, using fallback');
@@ -2005,7 +2072,6 @@
                         this.cityName = data.city || 'Unknown City';
                         this.country = data.country_name || 'Unknown Country';
                         this.locationName = data.region ? `${this.cityName}, ${data.region}` : this.cityName;
-                        console.log('🌐 Fallback location from IP:', this.locationName, this.country);
                     } else {
                         this.setDefaultLocationInfo();
                     }
@@ -2019,7 +2085,6 @@
                 this.cityName = 'Unknown Location';
                 this.country = 'Unknown Country';
                 this.locationName = 'Unknown Location';
-                console.log('❓ Using default location info');
             }
 
             getLocationDisplayText() {
@@ -2086,11 +2151,9 @@
 
             performEmergencyCleanup() {
                 if (!this.locationKey || this.sentMessageIds.length === 0) {
-                    console.log('🧹 EMERGENCY CLEANUP SKIPPED - No locationKey or no messages to clean');
                     return;
                 }
                 
-                console.log('🚨 PERFORMING EMERGENCY CLEANUP - Deleting', this.sentMessageIds.length, 'user messages');
                 
                 // Store cleanup info for potential retry
                 const cleanupData = {
@@ -2115,7 +2178,6 @@
                             JSON.stringify(cleanupPayload)
                         );
                         if (success) {
-                            console.log('📡 SENDBEACON SUCCESS - User message cleanup queued');
                             return;
                         }
                     }
@@ -2131,11 +2193,8 @@
             
             async asyncClearUserMessages() {
                 if (!this.locationKey || this.sentMessageIds.length === 0) {
-                    console.log('🧹 ASYNC CLEAR SKIPPED - No messages to clear');
                     return;
                 }
-                
-                console.log('🧹 ASYNC CLEARING', this.sentMessageIds.length, 'user messages');
                 
                 try {
                     // Get current messages from the location
@@ -2153,12 +2212,10 @@
                                     });
                                     if (deleteResponse.ok) {
                                         deletedCount++;
-                                        console.log('✅ DELETED USER MESSAGE:', message.id);
                                     }
                                 }
                             }
                             
-                            console.log('✅ USER MESSAGE CLEANUP SUCCESS - Deleted', deletedCount, 'messages');
                             this.showUserCleanupNotification(deletedCount);
                             this.clearStoredCleanupInfo();
                             // Clear the sent message IDs since they're deleted
@@ -2181,15 +2238,11 @@
                                    localCleanup ? JSON.parse(localCleanup) : null;
                 
                 if (cleanupInfo && cleanupInfo.locationKey) {
-                    console.log('🚨 FOUND EMERGENCY CLEANUP DATA:', cleanupInfo.locationKey);
-                    
                     // Only cleanup if it's recent (within 5 minutes)
                     const timeDiff = Date.now() - cleanupInfo.timestamp;
                     if (timeDiff < 300000) { // 5 minutes
-                        console.log('🧹 EXECUTING DEFERRED CLEANUP');
                         this.executeDeferredCleanup(cleanupInfo);
                     } else {
-                        console.log('🕒 CLEANUP DATA TOO OLD - Ignoring');
                         this.clearStoredCleanupInfo();
                     }
                 }
@@ -2199,7 +2252,6 @@
                 try {
                     // Only cleanup if we have message IDs to delete
                     if (!cleanupInfo.messageIds || cleanupInfo.messageIds.length === 0) {
-                        console.log('🧹 NO MESSAGES TO CLEANUP');
                         return;
                     }
                     
@@ -2218,7 +2270,6 @@
                                     });
                                     if (deleteResponse.ok) {
                                         deletedCount++;
-                                        console.log('✅ DEFERRED CLEANUP - Deleted user message:', message.id);
                                     }
                                 }
                             }
@@ -2249,11 +2300,9 @@
                                     deleteXhr.send();
                                     if (deleteXhr.status === 200 || deleteXhr.status === 204) {
                                         deletedCount++;
-                                        console.log('✅ DELETED USER MESSAGE SYNC:', message.id);
                                     }
                                 }
                             }
-                            console.log('✅ SYNC USER CLEANUP COMPLETE - Deleted', deletedCount, 'messages');
                             // Clear the sent message IDs since they're deleted
                             this.sentMessageIds = [];
                             localStorage.removeItem('pendingUserCleanup');
