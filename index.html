@@ -805,8 +805,7 @@
                 this.country = null;
                 this.cityName = null;
                 
-                // 🧹 Thread Clearing
-                this.threadClearStarted = false;
+                // 🧹 Thread Clearing - Using new robust cleanup system
                 
                 this.initElements();
                 this.setupCleanupListeners();
@@ -855,10 +854,7 @@
                 this.clearBtn.addEventListener('dblclick', () => {
                     console.log('🧪 MANUAL THREAD CLEAR TEST - Double-click detected');
                     console.log('🧪 Current locationKey:', this.locationKey);
-                    console.log('🧪 Current threadClearStarted:', this.threadClearStarted);
-                    // Reset the flag to allow manual testing
-                    this.threadClearStarted = false;
-                    this.syncClearEntireThread();
+                    this.asyncClearEntireThread();
                 });
                 
                 // Settings modal events
@@ -1007,16 +1003,9 @@
             }
 
             generateLocationKey(lat, lon) {
-                // BALANCED precision - group nearby devices, separate distant ones
-                let precision;
-                
-                if (this.radius <= 100) {
-                    precision = 0.001; // ~100m grid for small radius
-                } else if (this.radius <= 1000) {
-                    precision = 0.005; // ~500m grid for medium radius  
-                } else {
-                    precision = 0.01; // ~1km grid for large radius
-                }
+                // 🔧 FIXED: Use consistent precision for all users regardless of radius
+                // This ensures cross-radius communication works properly
+                const precision = 0.001; // ~100m grid for everyone - enables mutual visibility
                 
                 const gridLat = Math.floor(lat / precision) * precision;
                 const gridLon = Math.floor(lon / precision) * precision;
@@ -1025,43 +1014,53 @@
                 const locationId = `${gridLat.toFixed(3)}_${gridLon.toFixed(3)}`;
                 
                 console.log(`🗝️ LOCATION KEY - Input: ${lat.toFixed(6)}, ${lon.toFixed(6)}`);
-                console.log(`🗝️ LOCATION KEY - Grid: ${locationId}, Precision: ${precision}°, Radius: ${this.radius}m`);
+                console.log(`🗝️ LOCATION KEY - Grid: ${locationId}, Precision: ${precision}° (fixed for cross-radius visibility), Radius: ${this.radius}m`);
                 
                 return `area_${locationId.replace(/\./g, '_').replace(/-/g, 'n')}_r${this.radius}`;
             }
 
-            // 🏘️ MULTI-BUCKET PROXIMITY SEARCH - Generate 3x3 grid of nearby location keys
+            // 🔧 HELPER - Extract radius from location key for mutual visibility
+            extractRadiusFromLocationKey(locationKey) {
+                // Location key format: area_[lat]_[lon]_r[radius]
+                const match = locationKey.match(/_r(\d+)$/);
+                return match ? parseInt(match[1]) : null;
+            }
+
+            // 🏘️ MULTI-BUCKET PROXIMITY SEARCH - Generate 3x3 grid + multiple radius buckets
             getNearbyLocationKeys(lat, lon, radius) {
-                let precision;
-                
-                if (radius <= 100) {
-                    precision = 0.001; // ~100m grid
-                } else if (radius <= 1000) {
-                    precision = 0.005; // ~500m grid
-                } else {
-                    precision = 0.01; // ~1km grid
-                }
+                // 🔧 FIXED: Use consistent precision for all users regardless of their radius
+                // This ensures users with different radius settings can find each other
+                const precision = 0.001; // ~100m grid for everyone - ensures mutual visibility
                 
                 const baseLat = Math.floor(lat / precision) * precision;
                 const baseLon = Math.floor(lon / precision) * precision;
                 
                 const locationKeys = [];
                 
-                // Generate 3x3 grid: current cell + 8 neighbors
-                for (let latOffset = -1; latOffset <= 1; latOffset++) {
-                    for (let lonOffset = -1; lonOffset <= 1; lonOffset++) {
-                        const gridLat = baseLat + (latOffset * precision);
-                        const gridLon = baseLon + (lonOffset * precision);
-                        
-                        const locationId = `${gridLat.toFixed(3)}_${gridLon.toFixed(3)}`;
-                        const locationKey = `area_${locationId.replace(/\./g, '_').replace(/-/g, 'n')}_r${radius}`;
-                        locationKeys.push(locationKey);
-                    }
-                }
+                // 🤝 MUTUAL VISIBILITY - Search multiple radius buckets for cross-radius communication
+                const radiusesToSearch = [50, 100, 200, 500, 1000, 2000, 5000]; // Common radius values
                 
-                console.log(`🏘️ MULTI-BUCKET - Generated ${locationKeys.length} location keys for 3x3 search`);
-                console.log(`🏘️ CENTER BUCKET - ${locationKeys[4]} (index 4 = center of 3x3 grid)`);
-                console.log(`🏘️ ALL BUCKETS:`, locationKeys);
+                // Generate 3x3 grid for each radius
+                radiusesToSearch.forEach(searchRadius => {
+                    for (let latOffset = -1; latOffset <= 1; latOffset++) {
+                        for (let lonOffset = -1; lonOffset <= 1; lonOffset++) {
+                            const gridLat = baseLat + (latOffset * precision);
+                            const gridLon = baseLon + (lonOffset * precision);
+                            
+                            const locationId = `${gridLat.toFixed(3)}_${gridLon.toFixed(3)}`;
+                            const locationKey = `area_${locationId.replace(/\./g, '_').replace(/-/g, 'n')}_r${searchRadius}`;
+                            
+                            // Avoid duplicates
+                            if (!locationKeys.includes(locationKey)) {
+                                locationKeys.push(locationKey);
+                            }
+                        }
+                    }
+                });
+                
+                console.log(`🏘️ MULTI-BUCKET - Generated ${locationKeys.length} location keys for 3x3 × ${radiusesToSearch.length} radius search`);
+                console.log(`🏘️ SEARCHING RADIUS BUCKETS:`, radiusesToSearch);
+                console.log(`🏘️ TOTAL BUCKETS TO CHECK:`, locationKeys.length);
                 
                 return locationKeys;
             }
@@ -1209,14 +1208,17 @@
                     location: this.location,
                     timestamp: Date.now(),
                     reputation: this.userReputation,
-                    verified: this.locationVerified
+                    verified: this.locationVerified,
+                    radius: this.radius, // 🤝 Include radius for mutual visibility
+                    locationName: this.locationName, // 🌍 Include location name for display
+                    country: this.country // 🌍 Include country for display
                 };
 
                 console.log('📤 SENDING - Message with security metadata');
                 console.log('🔒 SECURITY - User reputation:', this.userReputation, 'Verified:', this.locationVerified);
 
                 // Add to UI immediately
-                this.addMessageToUI(message, true);
+                await this.addMessageToUI(message, true);
                 this.messageInput.value = '';
                 
                 // Update security metrics
@@ -1302,13 +1304,19 @@
                     
                     console.log(`✅ MULTI-BUCKET COMPLETE - Found ${recentMessages.length} recent messages across ${nearbyKeys.length} buckets`);
                     
-                    recentMessages.forEach(msg => {
-                        if (msg.location && this.isWithinRange(msg.location)) {
-                            this.addMessageToUI(msg, msg.userId === this.userId);
-                        } else {
-                            console.log(`🚫 FILTERED OUT - Message from ${this.calculateDistance(this.location.lat, this.location.lon, msg.location.lat, msg.location.lon).toFixed(0)}m away (outside ${this.radius}m radius)`);
+                    for (const msg of recentMessages) {
+                        if (msg.location) {
+                            // Use the radius from the message for mutual visibility
+                            const otherUserRadius = msg.radius || this.radius; // Fallback to current user's radius
+                            
+                            if (this.isWithinRange(msg.location, otherUserRadius)) {
+                                await this.addMessageToUI(msg, msg.userId === this.userId);
+                            } else {
+                                const distance = this.calculateDistance(this.location.lat, this.location.lon, msg.location.lat, msg.location.lon);
+                                console.log(`🚫 FILTERED OUT - Message from ${distance.toFixed(0)}m away (no mutual visibility: my ${this.radius}m vs their ${otherUserRadius}m)`);
+                            }
                         }
-                    });
+                    };
                 } catch (error) {
                     console.error('Error loading messages:', error);
                 }
@@ -1329,19 +1337,24 @@
                                 const data = await response.json();
                                 if (data) {
                                     let bucketNewMessages = 0;
-                                    Object.entries(data).forEach(([key, message]) => {
+                                    for (const [key, message] of Object.entries(data)) {
                                         // Skip our own messages, old messages, and check location proximity
                                         if (message.userId !== this.userId && 
                                             message.timestamp > this.lastMessageTime) {
                                             
-                                            if (message.location && this.isWithinRange(message.location)) {
-                                                this.addMessageToUI(message, false);
-                                                this.lastMessageTime = Math.max(this.lastMessageTime, message.timestamp);
-                                                bucketNewMessages++;
-                                                totalNewMessages++;
+                                            if (message.location) {
+                                                // Extract radius from the bucket we found this message in
+                                                const otherUserRadius = this.extractRadiusFromLocationKey(locationKey);
+                                                
+                                                if (this.isWithinRange(message.location, otherUserRadius)) {
+                                                    await this.addMessageToUI(message, false);
+                                                    this.lastMessageTime = Math.max(this.lastMessageTime, message.timestamp);
+                                                    bucketNewMessages++;
+                                                    totalNewMessages++;
+                                                }
                                             }
                                         }
-                                    });
+                                    }
                                 }
                             }
                         } catch (error) {
@@ -1359,9 +1372,8 @@
                 }
             }
 
-            isWithinRange(messageLocation) {
+            isWithinRange(messageLocation, otherUserRadius = null) {
                 if (!this.location || !messageLocation) {
-                    console.log("Nothing important");
                     return false;
                 }
                 
@@ -1373,21 +1385,27 @@
                 // Emergency failsafe - if distance > 100km, definitely reject
                 const EMERGENCY_MAX_DISTANCE = 100000; // 100km
                 if (distance > EMERGENCY_MAX_DISTANCE) {
-                    console.log("Nothing important");
+                    console.log(`🚫 EMERGENCY FILTER - Message from ${distance.toFixed(0)}m away (>100km limit)`);
                     return false;
                 }
                 
-                const isInRange = distance <= this.radius;
+                // 🤝 MUTUAL VISIBILITY CHECK
+                const myCanSeeOther = distance <= this.radius;
                 
-                console.log("Nothing important");
-                console.log("Nothing important");
-                console.log("Nothing important");
-                
-                if (distance > 10000) { // 10km+
-                    console.log("Nothing important");
+                // If we have the other user's radius, check mutual visibility
+                if (otherUserRadius !== null) {
+                    const otherCanSeeMe = distance <= otherUserRadius;
+                    const mutualVisibility = myCanSeeOther || otherCanSeeMe;
+                    
+                    console.log(`🤝 MUTUAL VISIBILITY - Distance: ${distance.toFixed(0)}m, My radius: ${this.radius}m, Other radius: ${otherUserRadius}m`);
+                    console.log(`🤝 VISIBILITY CHECK - I can see them: ${myCanSeeOther}, They can see me: ${otherCanSeeMe}, Result: ${mutualVisibility}`);
+                    
+                    return mutualVisibility;
+                } else {
+                    // Fallback to my radius only if other user's radius unknown
+                    console.log(`📍 RANGE CHECK - Distance: ${distance.toFixed(0)}m, My radius: ${this.radius}m, In range: ${myCanSeeOther}`);
+                    return myCanSeeOther;
                 }
-                
-                return isInRange;
             }
 
             calculateDistance(lat1, lon1, lat2, lon2) {
@@ -1405,7 +1423,7 @@
                 return degrees * (Math.PI / 180);
             }
 
-            addMessageToUI(message, isOwn) {
+            async addMessageToUI(message, isOwn) {
                 // Check for duplicates
                 if (this.messages.find(m => m.id === message.id)) return;
                 
@@ -1416,13 +1434,106 @@
                 
                 const time = new Date(message.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                 
+                // 🌍 Format location and radius information
+                let locationInfo = '';
+                if (isOwn) {
+                    // For own messages, use current location info
+                    const myLocationText = this.locationName && this.locationName !== 'Unknown Location' 
+                        ? `${this.locationName}, ${this.country}` 
+                        : `${this.location?.lat?.toFixed(3)}, ${this.location?.lon?.toFixed(3)}`;
+                    locationInfo = `${myLocationText} • ${this.radius}m radius`;
+                } else {
+                    // For other messages, get location info
+                    const otherRadius = message.radius || 'unknown';
+                    let otherLocation = 'Unknown';
+                    
+                    // Use stored location name if available
+                    if (message.locationName && message.locationName !== 'Unknown Location') {
+                        otherLocation = message.country ? `${message.locationName}, ${message.country}` : message.locationName;
+                    } else if (message.location) {
+                        // Try to get readable location via reverse geocoding
+                        try {
+                            otherLocation = await this.getReverseGeocodedLocation(message.location.lat, message.location.lon);
+                        } catch (error) {
+                            // Fallback to coordinates
+                            otherLocation = `${message.location.lat.toFixed(3)}, ${message.location.lon.toFixed(3)}`;
+                        }
+                    }
+                    
+                    locationInfo = `${otherLocation} • ${otherRadius}m radius`;
+                }
+                
+                const distance = isOwn ? '' : this.getDistanceText(message.location);
+                const distanceDisplay = distance ? ` • ${distance}` : '';
+                
+                // Create the message with initial placeholder for location
                 messageEl.innerHTML = `
-                    <div class="message-header">${isOwn ? 'You' : message.username} • ${time}</div>
+                    <div class="message-header">
+                        <strong>${isOwn ? 'You' : message.username}</strong> 
+                        <strong><span style="color: #4b3791; font-size: 0.85em;">• ${locationInfo}${distanceDisplay} • ${time}</span></strong>
+                    </div>
                     <div class="message-content">${this.escapeHtml(message.content)}</div>
                 `;
                 
                 this.messagesContainer.appendChild(messageEl);
                 this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+            }
+
+            // 🌍 Reverse geocoding to get location name from coordinates
+            async getReverseGeocodedLocation(lat, lon) {
+                try {
+                    const response = await fetch(
+                        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10&addressdetails=1`,
+                        {
+                            headers: {
+                                'User-Agent': 'ProximityChat/1.0'
+                            }
+                        }
+                    );
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.address) {
+                            const cityName = data.address.city || 
+                                           data.address.town || 
+                                           data.address.village || 
+                                           data.address.hamlet || 
+                                           data.address.suburb || 
+                                           'Unknown City';
+                            
+                            const country = data.address.country || 'Unknown Country';
+                            const state = data.address.state || data.address.region || '';
+                            const locationName = state ? `${cityName}, ${state}` : cityName;
+                            
+                            return `${locationName}, ${country}`;
+                        }
+                    }
+                } catch (error) {
+                    console.log('Reverse geocoding failed:', error.message);
+                }
+                
+                // Fallback to coordinates
+                return `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+            }
+
+            // 📏 Helper function to get distance text for messages
+            getDistanceText(messageLocation) {
+                if (!this.location || !messageLocation) return '';
+                
+                const distance = this.calculateDistance(
+                    this.location.lat, this.location.lon,
+                    messageLocation.lat, messageLocation.lon
+                );
+                
+                if (distance < 1) {
+                    return 'very close';
+                } else if (distance < 10) {
+                    return `${distance.toFixed(0)}m away`;
+                } else if (distance < 1000) {
+                    return `${distance.toFixed(0)}m away`;
+                } else {
+                    return `${(distance / 1000).toFixed(1)}km away`;
+                }
             }
 
             escapeHtml(text) {
@@ -1678,43 +1789,75 @@
             setupCleanupListeners() {
                 console.log('🎧 SETTING UP CLEANUP LISTENERS - Thread clearing events');
                 
-                // Always clear entire thread on exit - default behavior
+                // Store cleanup info for emergency cleanup
+                const storeCleanupInfo = () => {
+                    if (this.locationKey) {
+                        const cleanupInfo = {
+                            locationKey: this.locationKey,
+                            timestamp: Date.now(),
+                            firebaseUrl: this.firebaseUrl
+                        };
+                        // Use sessionStorage for same-session cleanup
+                        sessionStorage.setItem('emergencyCleanup', JSON.stringify(cleanupInfo));
+                        localStorage.setItem('emergencyCleanup', JSON.stringify(cleanupInfo));
+                    }
+                };
+                
+                // Primary cleanup using beforeunload with sendBeacon fallback
                 window.addEventListener('beforeunload', (e) => {
                     console.log('🚪 BEFOREUNLOAD EVENT - Triggering thread clear');
-                    this.syncClearEntireThread();
-                    // Don't prevent default - let the page close
+                    storeCleanupInfo();
+                    this.performEmergencyCleanup();
                 });
                 
-                window.addEventListener('unload', () => {
-                    console.log('🚪 UNLOAD EVENT - Triggering thread clear');
-                    this.syncClearEntireThread();
+                // Fallback cleanup using pagehide (more reliable on mobile)
+                window.addEventListener('pagehide', (e) => {
+                    console.log('🚪 PAGEHIDE EVENT - Triggering thread clear, persisted:', e.persisted);
+                    storeCleanupInfo();
+                    this.performEmergencyCleanup();
                 });
                 
+                // Detect page visibility changes but DON'T cleanup on tab switching
                 document.addEventListener('visibilitychange', () => {
-                    console.log('👁️ VISIBILITY CHANGE EVENT - Page visibility:', document.hidden ? 'hidden' : 'visible');
+                    console.log('👁️ VISIBILITY CHANGE - Page hidden:', document.hidden);
                     if (document.hidden) {
-                        console.log('👁️ VISIBILITY CHANGE - Page hidden, triggering thread clear');
-                        this.syncClearEntireThread();
+                        console.log('👁️ VISIBILITY - Tab/window hidden (but not cleaning up - could be tab switch)');
+                        // Only store cleanup info, don't actually cleanup
+                        // This prevents cleanup on tab switches while still preparing for real page closes
+                        storeCleanupInfo();
+                    } else {
+                        console.log('👁️ VISIBILITY - Tab/window visible again');
+                        // Clear any stored cleanup info since we're back
+                        sessionStorage.removeItem('emergencyCleanup');
                     }
                 });
                 
-                window.addEventListener('pagehide', (e) => {
-                    console.log('🚪 PAGEHIDE EVENT - Triggering thread clear, persisted:', e.persisted);
-                    this.syncClearEntireThread();
-                });
-                
-                // Additional keyboard shortcut detection
+                // Keyboard shortcuts detection
                 document.addEventListener('keydown', (e) => {
-                    // Detect Cmd+W (Mac) or Ctrl+W (Windows/Linux) to close tab
-                    if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
+                    // Detect tab/window close shortcuts
+                    if ((e.metaKey || e.ctrlKey) && (e.key === 'w' || e.key === 'W')) {
                         console.log('⌨️ KEYBOARD SHORTCUT - Tab close detected (Cmd/Ctrl+W)');
-                        this.syncClearEntireThread();
+                        storeCleanupInfo();
+                        this.performEmergencyCleanup();
+                    }
+                    // Detect browser refresh
+                    if ((e.metaKey || e.ctrlKey) && (e.key === 'r' || e.key === 'R')) {
+                        console.log('⌨️ KEYBOARD SHORTCUT - Refresh detected (Cmd/Ctrl+R)');
+                        storeCleanupInfo();
+                        this.performEmergencyCleanup();
+                    }
+                    // Detect F5 refresh
+                    if (e.key === 'F5') {
+                        console.log('⌨️ KEYBOARD SHORTCUT - F5 refresh detected');
+                        storeCleanupInfo();
+                        this.performEmergencyCleanup();
                     }
                 });
                 
                 console.log('✅ CLEANUP LISTENERS ATTACHED - Ready for thread clearing');
                 
-                // Check for pending cleanup on page load
+                // Check for pending cleanup from previous session
+                this.checkForEmergencyCleanup();
                 setTimeout(() => this.cleanupOldSessionMessages(), 2000);
             }
 
@@ -2003,30 +2146,134 @@
 
             // 🧹 THREAD CLEARING FUNCTIONALITY
 
-            syncClearEntireThread() {
-                if (this.threadClearStarted || !this.locationKey) {
-                    console.log('🧹 THREAD CLEAR SKIPPED - Already started or no locationKey:', { started: this.threadClearStarted, hasKey: !!this.locationKey });
+            performEmergencyCleanup() {
+                if (!this.locationKey) {
+                    console.log('🧹 EMERGENCY CLEANUP SKIPPED - No locationKey');
                     return;
                 }
                 
-                this.threadClearStarted = true;
-                console.log('🧹 CLEARING ENTIRE THREAD for location:', this.locationKey, '(default behavior)');
+                console.log('🚨 PERFORMING EMERGENCY CLEANUP for:', this.locationKey);
                 
                 try {
-                    // Delete entire location thread synchronously
+                    // Method 1: Try sendBeacon (most reliable for page unload)
+                    if (navigator.sendBeacon) {
+                        const deleteUrl = `${this.firebaseUrl}/proximity/${this.locationKey}.json`;
+                        const success = navigator.sendBeacon(deleteUrl, JSON.stringify(null));
+                        if (success) {
+                            console.log('📡 SENDBEACON SUCCESS - Thread delete queued');
+                            return;
+                        }
+                    }
+                    
+                    // Method 2: Try fetch with keepalive
+                    if ('fetch' in window) {
+                        fetch(`${this.firebaseUrl}/proximity/${this.locationKey}.json`, {
+                            method: 'DELETE',
+                            keepalive: true
+                        }).then(() => {
+                            console.log('🌐 FETCH KEEPALIVE SUCCESS - Thread cleared');
+                        }).catch(error => {
+                            console.log('🌐 FETCH KEEPALIVE FAILED:', error.message);
+                        });
+                        return;
+                    }
+                    
+                    // Method 3: Synchronous XHR as last resort
                     const xhr = new XMLHttpRequest();
-                    xhr.open('DELETE', `${this.firebaseUrl}/proximity/${this.locationKey}.json`, false); // false = synchronous
+                    xhr.open('DELETE', `${this.firebaseUrl}/proximity/${this.locationKey}.json`, false);
                     xhr.send();
                     
                     if (xhr.status === 200 || xhr.status === 204) {
-                        console.log('✅ ENTIRE THREAD CLEARED - Status:', xhr.status);
+                        console.log('📞 SYNC XHR SUCCESS - Thread cleared');
+                    }
+                    
+                } catch (error) {
+                    console.error('🚨 ALL EMERGENCY CLEANUP METHODS FAILED:', error);
+                    // Store for next session cleanup
+                    this.storeFailedCleanup();
+                }
+            }
+            
+            async asyncClearEntireThread() {
+                if (!this.locationKey) {
+                    console.log('🧹 ASYNC CLEAR SKIPPED - No locationKey');
+                    return;
+                }
+                
+                console.log('🧹 ASYNC CLEARING THREAD for:', this.locationKey);
+                
+                try {
+                    const response = await fetch(`${this.firebaseUrl}/proximity/${this.locationKey}.json`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (response.ok) {
+                        console.log('✅ ASYNC THREAD CLEAR SUCCESS');
                         this.showThreadClearNotification();
+                        this.clearStoredCleanupInfo();
                     } else {
-                        console.error('Failed to clear thread - Status:', xhr.status, 'Response:', xhr.responseText);
+                        console.error('❌ ASYNC THREAD CLEAR FAILED:', response.status);
                     }
                 } catch (error) {
-                    console.error('Sync thread clear failed:', error);
+                    console.error('❌ ASYNC THREAD CLEAR ERROR:', error);
                 }
+            }
+            
+            checkForEmergencyCleanup() {
+                // Check both session and local storage for cleanup info
+                const sessionCleanup = sessionStorage.getItem('emergencyCleanup');
+                const localCleanup = localStorage.getItem('emergencyCleanup');
+                
+                const cleanupInfo = sessionCleanup ? JSON.parse(sessionCleanup) : 
+                                   localCleanup ? JSON.parse(localCleanup) : null;
+                
+                if (cleanupInfo && cleanupInfo.locationKey) {
+                    console.log('🚨 FOUND EMERGENCY CLEANUP DATA:', cleanupInfo.locationKey);
+                    
+                    // Only cleanup if it's recent (within 5 minutes)
+                    const timeDiff = Date.now() - cleanupInfo.timestamp;
+                    if (timeDiff < 300000) { // 5 minutes
+                        console.log('🧹 EXECUTING DEFERRED CLEANUP');
+                        this.executeDeferredCleanup(cleanupInfo);
+                    } else {
+                        console.log('🕒 CLEANUP DATA TOO OLD - Ignoring');
+                        this.clearStoredCleanupInfo();
+                    }
+                }
+            }
+            
+            async executeDeferredCleanup(cleanupInfo) {
+                try {
+                    const response = await fetch(`${cleanupInfo.firebaseUrl}/proximity/${cleanupInfo.locationKey}.json`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (response.ok) {
+                        console.log('✅ DEFERRED CLEANUP SUCCESS for:', cleanupInfo.locationKey);
+                    }
+                } catch (error) {
+                    console.error('❌ DEFERRED CLEANUP FAILED:', error);
+                } finally {
+                    this.clearStoredCleanupInfo();
+                }
+            }
+            
+            storeFailedCleanup() {
+                if (this.locationKey) {
+                    const failedCleanup = {
+                        locationKey: this.locationKey,
+                        timestamp: Date.now(),
+                        firebaseUrl: this.firebaseUrl,
+                        failed: true
+                    };
+                    localStorage.setItem('failedCleanup', JSON.stringify(failedCleanup));
+                }
+            }
+            
+            clearStoredCleanupInfo() {
+                sessionStorage.removeItem('emergencyCleanup');
+                localStorage.removeItem('emergencyCleanup');
+                localStorage.removeItem('failedCleanup');
             }
             
             showThreadClearNotification() {
