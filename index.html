@@ -692,7 +692,7 @@
                 ⚙️ Settings
             </button>
             <button id="clearBtn" class="control-btn clear-btn">
-                🗑️ Clear Chat
+                🗑️ Clear My Messages
             </button>
         </div>
         
@@ -751,10 +751,10 @@
     <!-- Clear Chat Confirmation Modal -->
     <div id="clearModal" class="modal">
         <div class="modal-content">
-            <h3>⚠️ Clear Chat</h3>
-            <p>This will permanently delete <strong>all messages</strong> in this area for <strong>everyone</strong>. This action cannot be undone.</p>
+            <h3>🗑️ Clear Your Messages</h3>
+            <p>This will permanently delete <strong>only YOUR messages</strong> from this area. Other users' messages will remain.</p>
             <div class="modal-buttons">
-                <button id="confirmClear" class="modal-btn danger">Delete All</button>
+                <button id="confirmClear" class="modal-btn danger">Clear My Messages</button>
                 <button id="cancelClear" class="modal-btn secondary">Cancel</button>
             </div>
         </div>
@@ -845,11 +845,12 @@
                 this.settingsBtn.addEventListener('click', () => this.showSettingsModal());
                 this.clearBtn.addEventListener('click', () => this.showClearModal());
                 
-                // Add double-click on clear button for manual thread clearing testing
+                // Add double-click on clear button for manual user message clearing testing
                 this.clearBtn.addEventListener('dblclick', () => {
-                    console.log('🧪 MANUAL THREAD CLEAR TEST - Double-click detected');
+                    console.log('🧪 MANUAL USER MESSAGE CLEAR TEST - Double-click detected');
                     console.log('🧪 Current locationKey:', this.locationKey);
-                    this.asyncClearEntireThread();
+                    console.log('🧪 Messages to clear:', this.sentMessageIds.length);
+                    this.asyncClearUserMessages();
                 });
                 
                 // Settings modal events
@@ -1521,28 +1522,26 @@
             async clearAllMessages() {
                 this.hideClearModal();
                 this.confirmClear.disabled = true;
-                this.confirmClear.innerHTML = 'Deleting...';
+                this.confirmClear.innerHTML = 'Clearing your messages...';
                 
                 try {
-                    // Delete all messages from Firebase
-                    const response = await fetch(`${this.firebaseUrl}/proximity/${this.locationKey}.json`, {
-                        method: 'DELETE'
-                    });
+                    // Clear only user's own messages
+                    await this.asyncClearUserMessages();
                     
-                    if (response.ok) {
-                        // Clear local messages
-                        this.messages = [];
-                        this.messagesContainer.innerHTML = '<div class="welcome"><p>🧹 Chat cleared! Start a new conversation...</p></div>';
-                        this.showSuccess('Chat cleared for everyone in this area');
+                    // Refresh to show updated view without user's messages
+                    await this.loadExistingMessages();
+                    
+                    if (this.sentMessageIds.length === 0) {
+                        this.showSuccess('Your messages have been cleared from this area');
                     } else {
-                        throw new Error('Failed to clear messages');
+                        this.showError('Some messages could not be cleared. Please try again.');
                     }
                 } catch (error) {
                     console.error('Clear error:', error);
-                    this.showError('Failed to clear messages. Please try again.');
+                    this.showError('Failed to clear your messages. Please try again.');
                 } finally {
                     this.confirmClear.disabled = false;
-                    this.confirmClear.innerHTML = 'Delete All';
+                    this.confirmClear.innerHTML = 'Clear My Messages';
                 }
             }
 
@@ -1727,9 +1726,11 @@
                 
                 // Store cleanup info for emergency cleanup
                 const storeCleanupInfo = () => {
-                    if (this.locationKey) {
+                    if (this.locationKey && this.sentMessageIds.length > 0) {
                         const cleanupInfo = {
                             locationKey: this.locationKey,
+                            messageIds: [...this.sentMessageIds],
+                            userId: this.userId,
                             timestamp: Date.now(),
                             firebaseUrl: this.firebaseUrl
                         };
@@ -1878,25 +1879,26 @@
             }
 
             async cleanupOldSessionMessages() {
-                // Check for pending cleanup from previous session
-                const pendingCleanup = localStorage.getItem('pendingCleanup');
-                if (pendingCleanup) {
+                // Check for pending user cleanup from previous session
+                const pendingUserCleanup = localStorage.getItem('pendingUserCleanup');
+                if (pendingUserCleanup) {
                     try {
-                        const cleanupData = JSON.parse(pendingCleanup);
+                        const cleanupData = JSON.parse(pendingUserCleanup);
                         const timeDiff = Date.now() - cleanupData.timestamp;
                         
                         // If cleanup data is less than 5 minutes old, perform cleanup
                         if (timeDiff < 5 * 60 * 1000 && cleanupData.messageIds && cleanupData.messageIds.length > 0) {
-                            console.log('🔄 RESUMING CLEANUP - Found pending cleanup from previous session');
+                            console.log('🔄 RESUMING USER CLEANUP - Found pending cleanup from previous session');
                             this.locationKey = cleanupData.locationKey;
-                            await this.performCleanup(cleanupData.messageIds);
+                            this.sentMessageIds = cleanupData.messageIds;
+                            await this.asyncClearUserMessages();
                         } else {
                             // Remove old cleanup data
-                            localStorage.removeItem('pendingCleanup');
+                            localStorage.removeItem('pendingUserCleanup');
                         }
                     } catch (error) {
-                        console.error('Error processing pending cleanup:', error);
-                        localStorage.removeItem('pendingCleanup');
+                        console.error('Error processing pending user cleanup:', error);
+                        localStorage.removeItem('pendingUserCleanup');
                     }
                 }
             }
@@ -2059,7 +2061,7 @@
                         transform: translateX(100%);
                         transition: all 0.3s ease;
                     `;
-                    notification.innerHTML = '🧹 Messages cleaned up successfully';
+                    notification.innerHTML = '🧹 Your messages cleaned up successfully';
                     
                     document.body.appendChild(notification);
                     
@@ -2083,75 +2085,90 @@
             // 🧹 THREAD CLEARING FUNCTIONALITY
 
             performEmergencyCleanup() {
-                if (!this.locationKey) {
-                    console.log('🧹 EMERGENCY CLEANUP SKIPPED - No locationKey');
+                if (!this.locationKey || this.sentMessageIds.length === 0) {
+                    console.log('🧹 EMERGENCY CLEANUP SKIPPED - No locationKey or no messages to clean');
                     return;
                 }
                 
-                console.log('🚨 PERFORMING EMERGENCY CLEANUP for:', this.locationKey);
+                console.log('🚨 PERFORMING EMERGENCY CLEANUP - Deleting', this.sentMessageIds.length, 'user messages');
+                
+                // Store cleanup info for potential retry
+                const cleanupData = {
+                    messageIds: [...this.sentMessageIds],
+                    locationKey: this.locationKey,
+                    timestamp: Date.now(),
+                    userId: this.userId
+                };
+                localStorage.setItem('pendingUserCleanup', JSON.stringify(cleanupData));
                 
                 try {
-                    // Method 1: Try sendBeacon (most reliable for page unload)
-                    if (navigator.sendBeacon) {
-                        const deleteUrl = `${this.firebaseUrl}/proximity/${this.locationKey}.json`;
-                        const success = navigator.sendBeacon(deleteUrl, JSON.stringify(null));
+                    // Use sendBeacon to queue individual message deletions
+                    if (navigator.sendBeacon && this.sentMessageIds.length > 0) {
+                        // Send cleanup request with message IDs
+                        const cleanupPayload = {
+                            action: 'deleteUserMessages',
+                            messageIds: this.sentMessageIds,
+                            userId: this.userId
+                        };
+                        const success = navigator.sendBeacon(
+                            `${this.firebaseUrl}/cleanup.json`, 
+                            JSON.stringify(cleanupPayload)
+                        );
                         if (success) {
-                            console.log('📡 SENDBEACON SUCCESS - Thread delete queued');
+                            console.log('📡 SENDBEACON SUCCESS - User message cleanup queued');
                             return;
                         }
                     }
                     
-                    // Method 2: Try fetch with keepalive
-                    if ('fetch' in window) {
-                        fetch(`${this.firebaseUrl}/proximity/${this.locationKey}.json`, {
-                            method: 'DELETE',
-                            keepalive: true
-                        }).then(() => {
-                            console.log('🌐 FETCH KEEPALIVE SUCCESS - Thread cleared');
-                        }).catch(error => {
-                            console.log('🌐 FETCH KEEPALIVE FAILED:', error.message);
-                        });
-                        return;
-                    }
-                    
-                    // Method 3: Synchronous XHR as last resort
-                    const xhr = new XMLHttpRequest();
-                    xhr.open('DELETE', `${this.firebaseUrl}/proximity/${this.locationKey}.json`, false);
-                    xhr.send();
-                    
-                    if (xhr.status === 200 || xhr.status === 204) {
-                        console.log('📞 SYNC XHR SUCCESS - Thread cleared');
-                    }
+                    // Fallback: Try to delete individual messages synchronously
+                    this.deleteUserMessagesSync();
                     
                 } catch (error) {
-                    console.error('🚨 ALL EMERGENCY CLEANUP METHODS FAILED:', error);
-                    // Store for next session cleanup
-                    this.storeFailedCleanup();
+                    console.error('🚨 EMERGENCY CLEANUP FAILED:', error);
+                    // Keep data in localStorage for async cleanup
                 }
             }
             
-            async asyncClearEntireThread() {
-                if (!this.locationKey) {
-                    console.log('🧹 ASYNC CLEAR SKIPPED - No locationKey');
+            async asyncClearUserMessages() {
+                if (!this.locationKey || this.sentMessageIds.length === 0) {
+                    console.log('🧹 ASYNC CLEAR SKIPPED - No messages to clear');
                     return;
                 }
                 
-                console.log('🧹 ASYNC CLEARING THREAD for:', this.locationKey);
+                console.log('🧹 ASYNC CLEARING', this.sentMessageIds.length, 'user messages');
                 
                 try {
-                    const response = await fetch(`${this.firebaseUrl}/proximity/${this.locationKey}.json`, {
-                        method: 'DELETE'
-                    });
+                    // Get current messages from the location
+                    const response = await fetch(`${this.firebaseUrl}/proximity/${this.locationKey}.json`);
                     
                     if (response.ok) {
-                        console.log('✅ ASYNC THREAD CLEAR SUCCESS');
-                        this.showThreadClearNotification();
-                        this.clearStoredCleanupInfo();
+                        const data = await response.json();
+                        if (data) {
+                            let deletedCount = 0;
+                            // Delete only our messages
+                            for (const [firebaseKey, message] of Object.entries(data)) {
+                                if (this.sentMessageIds.includes(message.id)) {
+                                    const deleteResponse = await fetch(`${this.firebaseUrl}/proximity/${this.locationKey}/${firebaseKey}.json`, {
+                                        method: 'DELETE'
+                                    });
+                                    if (deleteResponse.ok) {
+                                        deletedCount++;
+                                        console.log('✅ DELETED USER MESSAGE:', message.id);
+                                    }
+                                }
+                            }
+                            
+                            console.log('✅ USER MESSAGE CLEANUP SUCCESS - Deleted', deletedCount, 'messages');
+                            this.showUserCleanupNotification(deletedCount);
+                            this.clearStoredCleanupInfo();
+                            // Clear the sent message IDs since they're deleted
+                            this.sentMessageIds = [];
+                        }
                     } else {
-                        console.error('❌ ASYNC THREAD CLEAR FAILED:', response.status);
+                        console.error('❌ USER MESSAGE CLEAR FAILED:', response.status);
                     }
                 } catch (error) {
-                    console.error('❌ ASYNC THREAD CLEAR ERROR:', error);
+                    console.error('❌ USER MESSAGE CLEAR ERROR:', error);
                 }
             }
             
@@ -2180,17 +2197,70 @@
             
             async executeDeferredCleanup(cleanupInfo) {
                 try {
-                    const response = await fetch(`${cleanupInfo.firebaseUrl}/proximity/${cleanupInfo.locationKey}.json`, {
-                        method: 'DELETE'
-                    });
+                    // Only cleanup if we have message IDs to delete
+                    if (!cleanupInfo.messageIds || cleanupInfo.messageIds.length === 0) {
+                        console.log('🧹 NO MESSAGES TO CLEANUP');
+                        return;
+                    }
+                    
+                    // Get current messages from the location
+                    const response = await fetch(`${cleanupInfo.firebaseUrl}/proximity/${cleanupInfo.locationKey}.json`);
                     
                     if (response.ok) {
-                        console.log('✅ DEFERRED CLEANUP SUCCESS for:', cleanupInfo.locationKey);
+                        const data = await response.json();
+                        if (data) {
+                            let deletedCount = 0;
+                            // Delete only our messages
+                            for (const [firebaseKey, message] of Object.entries(data)) {
+                                if (cleanupInfo.messageIds.includes(message.id)) {
+                                    const deleteResponse = await fetch(`${cleanupInfo.firebaseUrl}/proximity/${cleanupInfo.locationKey}/${firebaseKey}.json`, {
+                                        method: 'DELETE'
+                                    });
+                                    if (deleteResponse.ok) {
+                                        deletedCount++;
+                                        console.log('✅ DEFERRED CLEANUP - Deleted user message:', message.id);
+                                    }
+                                }
+                            }
+                            console.log('✅ DEFERRED CLEANUP SUCCESS - Deleted', deletedCount, 'user messages from:', cleanupInfo.locationKey);
+                        }
                     }
                 } catch (error) {
                     console.error('❌ DEFERRED CLEANUP FAILED:', error);
                 } finally {
                     this.clearStoredCleanupInfo();
+                }
+            }
+            
+            deleteUserMessagesSync() {
+                try {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('GET', `${this.firebaseUrl}/proximity/${this.locationKey}.json`, false);
+                    xhr.send();
+                    
+                    if (xhr.status === 200) {
+                        const data = JSON.parse(xhr.responseText);
+                        if (data) {
+                            let deletedCount = 0;
+                            for (const [firebaseKey, message] of Object.entries(data)) {
+                                if (this.sentMessageIds.includes(message.id)) {
+                                    const deleteXhr = new XMLHttpRequest();
+                                    deleteXhr.open('DELETE', `${this.firebaseUrl}/proximity/${this.locationKey}/${firebaseKey}.json`, false);
+                                    deleteXhr.send();
+                                    if (deleteXhr.status === 200 || deleteXhr.status === 204) {
+                                        deletedCount++;
+                                        console.log('✅ DELETED USER MESSAGE SYNC:', message.id);
+                                    }
+                                }
+                            }
+                            console.log('✅ SYNC USER CLEANUP COMPLETE - Deleted', deletedCount, 'messages');
+                            // Clear the sent message IDs since they're deleted
+                            this.sentMessageIds = [];
+                            localStorage.removeItem('pendingUserCleanup');
+                        }
+                    }
+                } catch (error) {
+                    console.error('Sync user cleanup failed:', error);
                 }
             }
             
@@ -2212,16 +2282,16 @@
                 localStorage.removeItem('failedCleanup');
             }
             
-            showThreadClearNotification() {
+            showUserCleanupNotification(deletedCount) {
                 try {
                     if (!document.hidden) {
                         const notification = document.createElement('div');
-                        notification.className = 'thread-clear-notification';
+                        notification.className = 'user-cleanup-notification';
                         notification.style.cssText = `
                             position: fixed;
                             top: 20px;
                             right: 20px;
-                            background: linear-gradient(135deg, #dc3545, #c82333);
+                            background: linear-gradient(135deg, #28a745, #20c997);
                             color: white;
                             padding: 12px 20px;
                             border-radius: 8px;
@@ -2233,7 +2303,7 @@
                             transform: translateX(100%);
                             transition: all 0.3s ease;
                         `;
-                        notification.innerHTML = '🧹 Entire chat thread cleared';
+                        notification.innerHTML = `🧹 Your ${deletedCount} message${deletedCount !== 1 ? 's' : ''} cleared`;
                         
                         document.body.appendChild(notification);
                         
@@ -2251,7 +2321,7 @@
                         }, 3000);
                     }
                 } catch (error) {
-                    console.error('Error showing thread clear notification:', error);
+                    console.error('Error showing user cleanup notification:', error);
                 }
             }
         }
