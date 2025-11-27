@@ -1,0 +1,3 @@
+[    1801ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://localhost:8765/favicon.ico:0
+[   16712ms] [ERROR] Location/Firebase error: GeolocationPositionError @ http://localhost:8765/app.js:252
+[   63885ms] [ERROR] Location/Firebase error: GeolocationPositionError @ http://localhost:8765/app.js:252

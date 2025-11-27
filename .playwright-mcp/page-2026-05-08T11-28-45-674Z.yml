@@ -1,0 +1,20 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]: P
+        - generic [ref=e6]:
+          - generic [ref=e7]: Proximity
+          - generic [ref=e8]: LOCATING…
+      - button "01" [ref=e9] [cursor=pointer]:
+        - generic [ref=e11]: "01"
+      - button "System" [ref=e12] [cursor=pointer]: SYS
+    - main [ref=e14]:
+      - generic [ref=e15]:
+        - heading "Establishing link…" [level=2] [ref=e17]
+        - paragraph [ref=e18]: Allow location access to chat with people inside a 3 km radius.
+    - contentinfo [ref=e19]:
+      - generic [ref=e20]: ">"
+      - textbox "Type message…" [disabled] [ref=e21]
+      - button "Send" [disabled] [ref=e22]
+  - text: "!"

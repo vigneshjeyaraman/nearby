@@ -1,0 +1,23 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]: P
+        - generic [ref=e6]:
+          - generic [ref=e7]: Proximity
+          - generic [ref=e8]: OFFLINE
+      - button "01 nearby" [ref=e9] [cursor=pointer]:
+        - generic [ref=e11]: "01"
+        - generic [ref=e12]: nearby
+      - button "System" [ref=e13] [cursor=pointer]: SYS
+    - main [ref=e15]:
+      - generic [ref=e16]:
+        - heading "CONNECTION FAILED" [level=2] [ref=e18]
+        - paragraph [ref=e19]: Failed to start. Location permission denied.
+        - button "⟲ RETRY" [ref=e20] [cursor=pointer]
+    - contentinfo [ref=e21]:
+      - generic [ref=e22]: ">"
+      - textbox "Type message…" [disabled] [ref=e23]
+      - button "Send" [disabled] [ref=e24]
+  - generic [ref=e25]: Failed to start. Location permission denied.
+  - text: "!"
