@@ -732,13 +732,10 @@
             </div>
             
             <div class="setting-group">
-                <label for="radiusSlider">Chat Radius</label>
-                <div class="radius-display" id="radiusDisplay">100 meters</div>
-                <input type="range" id="radiusSlider" class="radius-slider" 
-                       min="50" max="5000" value="100" step="50">
-                <div style="display: flex; justify-content: space-between; font-size: 12px; color: #999; margin-top: 5px;">
-                    <span>50m</span>
-                    <span>5km</span>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center; color: #666;">
+                    <div style="font-size: 14px; margin-bottom: 5px;">📡 Broadcasting within</div>
+                    <div style="font-size: 18px; font-weight: bold; color: #667eea;">3 km radius</div>
+                    <div style="font-size: 12px; margin-top: 5px;">All users in your area will see your messages</div>
                 </div>
             </div>
             
@@ -771,7 +768,7 @@
                 this.locationKey = null;
                 this.userId = 'user_' + Math.random().toString(36).substr(2, 9);
                 this.username = this.loadUsername() || this.generateUsername();
-                this.radius = this.loadRadius() || 100;
+                this.radius = 3000; // Fixed 3km radius for all users
                 this.messages = [];
                 this.lastMessageTime = Date.now();
                 this.autoRefreshInterval = null;
@@ -826,8 +823,6 @@
                 // Settings modal elements
                 this.settingsModal = document.getElementById('settingsModal');
                 this.usernameInput = document.getElementById('usernameInput');
-                this.radiusSlider = document.getElementById('radiusSlider');
-                this.radiusDisplay = document.getElementById('radiusDisplay');
                 this.saveSettings = document.getElementById('saveSettings');
                 this.cancelSettings = document.getElementById('cancelSettings');
                 
@@ -858,7 +853,6 @@
                 });
                 
                 // Settings modal events
-                this.radiusSlider.addEventListener('input', () => this.updateRadiusDisplay());
                 this.saveSettings.addEventListener('click', () => this.saveSettingsChanges());
                 this.cancelSettings.addEventListener('click', () => this.hideSettingsModal());
                 
@@ -875,9 +869,7 @@
                 });
                 
                 // Initialize settings UI
-                this.updateRadiusDisplay();
                 this.usernameInput.value = this.username;
-                this.radiusSlider.value = this.radius;
             }
 
             generateUsername() {
@@ -1014,7 +1006,7 @@
                 const locationId = `${gridLat.toFixed(3)}_${gridLon.toFixed(3)}`;
                 
                 console.log(`🗝️ LOCATION KEY - Input: ${lat.toFixed(6)}, ${lon.toFixed(6)}`);
-                console.log(`🗝️ LOCATION KEY - Grid: ${locationId}, Precision: ${precision}° (fixed for cross-radius visibility), Radius: ${this.radius}m`);
+                console.log(`🎯 SIMPLIFIED KEY - Grid: ${locationId}, Fixed precision for all users, Radius: ${this.radius}m`);
                 
                 return `area_${locationId.replace(/\./g, '_').replace(/-/g, 'n')}_r${this.radius}`;
             }
@@ -1026,7 +1018,7 @@
                 return match ? parseInt(match[1]) : null;
             }
 
-            // 🏘️ MULTI-BUCKET PROXIMITY SEARCH - Generate 3x3 grid + multiple radius buckets
+            // 🎯 SIMPLIFIED PROXIMITY SEARCH - Generate 3x3 grid with fixed 3km radius
             getNearbyLocationKeys(lat, lon, radius) {
                 // 🔧 FIXED: Use consistent precision for all users regardless of their radius
                 // This ensures users with different radius settings can find each other
@@ -1037,10 +1029,10 @@
                 
                 const locationKeys = [];
                 
-                // 🤝 MUTUAL VISIBILITY - Search multiple radius buckets for cross-radius communication
-                const radiusesToSearch = [50, 100, 200, 500, 1000, 2000, 5000]; // Common radius values
+                // 🎯 SIMPLIFIED - Use single radius bucket since we're not filtering by distance
+                const radiusesToSearch = [3000]; // Fixed 3km radius for everyone
                 
-                // Generate 3x3 grid for each radius
+                // Generate 3x3 grid for the fixed radius
                 radiusesToSearch.forEach(searchRadius => {
                     for (let latOffset = -1; latOffset <= 1; latOffset++) {
                         for (let lonOffset = -1; lonOffset <= 1; lonOffset++) {
@@ -1058,9 +1050,9 @@
                     }
                 });
                 
-                console.log(`🏘️ MULTI-BUCKET - Generated ${locationKeys.length} location keys for 3x3 × ${radiusesToSearch.length} radius search`);
-                console.log(`🏘️ SEARCHING RADIUS BUCKETS:`, radiusesToSearch);
-                console.log(`🏘️ TOTAL BUCKETS TO CHECK:`, locationKeys.length);
+                console.log(`🎯 SIMPLIFIED GRID - Generated ${locationKeys.length} location keys for 3x3 grid search`);
+                console.log(`🎯 USING FIXED RADIUS:`, radiusesToSearch[0], 'm');
+                console.log(`🎯 TOTAL BUCKETS TO CHECK:`, locationKeys.length);
                 
                 return locationKeys;
             }
@@ -1073,19 +1065,10 @@
                 localStorage.setItem('proximityChat_username', username);
             }
 
-            loadRadius() {
-                const saved = localStorage.getItem('proximityChat_radius');
-                return saved ? parseInt(saved) : null;
-            }
 
-            saveRadius(radius) {
-                localStorage.setItem('proximityChat_radius', radius.toString());
-            }
 
             showSettingsModal() {
                 this.usernameInput.value = this.username;
-                this.radiusSlider.value = this.radius;
-                this.updateRadiusDisplay();
                 this.settingsModal.style.display = 'flex';
             }
 
@@ -1093,18 +1076,10 @@
                 this.settingsModal.style.display = 'none';
             }
 
-            updateRadiusDisplay() {
-                const radius = parseInt(this.radiusSlider.value);
-                if (radius >= 1000) {
-                    this.radiusDisplay.textContent = `${(radius / 1000).toFixed(1)} km`;
-                } else {
-                    this.radiusDisplay.textContent = `${radius} meters`;
-                }
-            }
+
 
             async saveSettingsChanges() {
                 const newUsername = this.usernameInput.value.trim();
-                const newRadius = parseInt(this.radiusSlider.value);
                 
                 if (!newUsername) {
                     this.showError('Username cannot be empty');
@@ -1116,33 +1091,15 @@
                     return;
                 }
                 
-                const oldLocationKey = this.locationKey;
-                
                 // Update settings
                 this.username = newUsername;
-                this.radius = newRadius;
                 this.saveUsername(newUsername);
-                this.saveRadius(newRadius);
-                
-                // Update location key if radius changed
-                if (this.location) {
-                    const newLocationKey = this.generateLocationKey(this.location.lat, this.location.lon);
-                    if (newLocationKey !== oldLocationKey) {
-                        this.locationKey = newLocationKey;
-                        // Clear current messages and reload for new area
-                        this.messages = [];
-                        this.messagesContainer.innerHTML = '';
-                        await this.loadExistingMessages();
-                        // Restart auto-refresh for new area
-                        this.startAutoRefresh();
-                    }
-                }
                 
                 // Update location info display
                 this.updateLocationDisplay();
                 
                 this.hideSettingsModal();
-                this.showSuccess('Settings saved successfully!');
+                this.showSuccess('Username updated successfully!');
             }
 
             updateLocationDisplay() {
@@ -1154,7 +1111,7 @@
                 this.locationInfo.innerHTML = `
                     <span class="status-indicator"></span>
                     ${locationText}
-                    <span id="autoRefreshIndicator" class="auto-refresh-indicator"><strong>Auto-refresh: 20sec (9-bucket)</strong></span>
+                    <span id="autoRefreshIndicator" class="auto-refresh-indicator"><strong>Auto-refresh: 20sec</strong></span>
                     <div class="user-info">Chatting as: ${this.username} • Reputation: ${this.userReputation}</div>
                 `;
             }
@@ -1263,11 +1220,11 @@
 
             async loadExistingMessages() {
                 try {
-                    // 🏘️ MULTI-BUCKET SEARCH - Search all 9 location buckets
+                    // 🎯 SIMPLIFIED SEARCH - Search local area with 3km radius
                     const nearbyKeys = this.getNearbyLocationKeys(this.location.lat, this.location.lon, this.radius);
                     const allMessages = new Map(); // Use Map to avoid duplicates
                     
-                    console.log(`🔍 MULTI-BUCKET SEARCH - Checking ${nearbyKeys.length} location buckets`);
+                    console.log(`🎯 SIMPLIFIED SEARCH - Checking ${nearbyKeys.length} location buckets (3km radius)`);                    
                     
                     // Search all nearby location buckets
                     const searchPromises = nearbyKeys.map(async (locationKey, index) => {
@@ -1306,14 +1263,9 @@
                     
                     for (const msg of recentMessages) {
                         if (msg.location) {
-                            // Use the radius from the message for mutual visibility
-                            const otherUserRadius = msg.radius || this.radius; // Fallback to current user's radius
-                            
-                            if (this.isWithinRange(msg.location, otherUserRadius)) {
+                            // 🎯 SIMPLIFIED - Just show all messages in the area
+                            if (this.isWithinRange(msg.location)) {
                                 await this.addMessageToUI(msg, msg.userId === this.userId);
-                            } else {
-                                const distance = this.calculateDistance(this.location.lat, this.location.lon, msg.location.lat, msg.location.lon);
-                                console.log(`🚫 FILTERED OUT - Message from ${distance.toFixed(0)}m away (no mutual visibility: my ${this.radius}m vs their ${otherUserRadius}m)`);
                             }
                         }
                     };
@@ -1343,10 +1295,8 @@
                                             message.timestamp > this.lastMessageTime) {
                                             
                                             if (message.location) {
-                                                // Use the radius from the message data, not the bucket name
-                                                const otherUserRadius = message.radius || this.extractRadiusFromLocationKey(locationKey);
-                                                
-                                                if (this.isWithinRange(message.location, otherUserRadius)) {
+                                                // 🎯 SIMPLIFIED - Just show all messages in the area
+                                                if (this.isWithinRange(message.location)) {
                                                     await this.addMessageToUI(message, false);
                                                     this.lastMessageTime = Math.max(this.lastMessageTime, message.timestamp);
                                                     bucketNewMessages++;
@@ -1389,23 +1339,9 @@
                     return false;
                 }
                 
-                // 🤝 MUTUAL VISIBILITY CHECK
-                const myCanSeeOther = distance <= this.radius;
-                
-                // If we have the other user's radius, check mutual visibility
-                if (otherUserRadius !== null) {
-                    const otherCanSeeMe = distance <= otherUserRadius;
-                    const mutualVisibility = myCanSeeOther || otherCanSeeMe;
-                    
-                    console.log(`🤝 MUTUAL VISIBILITY - Distance: ${distance.toFixed(0)}m, My radius: ${this.radius}m, Other radius: ${otherUserRadius}m`);
-                    console.log(`🤝 VISIBILITY CHECK - I can see them: ${myCanSeeOther}, They can see me: ${otherCanSeeMe}, Result: ${mutualVisibility}`);
-                    
-                    return mutualVisibility;
-                } else {
-                    // Fallback to my radius only if other user's radius unknown
-                    console.log(`📍 RANGE CHECK - Distance: ${distance.toFixed(0)}m, My radius: ${this.radius}m, In range: ${myCanSeeOther}`);
-                    return myCanSeeOther;
-                }
+                // 🎯 SIMPLIFIED - No distance filtering, everyone sees everyone in the same grid
+                console.log(`✅ SIMPLIFIED RANGE - Distance: ${distance.toFixed(0)}m (no filtering, showing all local messages)`);
+                return true;
             }
 
             calculateDistance(lat1, lon1, lat2, lon2) {
@@ -1649,20 +1585,20 @@
                     if (newCount > currentCount) {
                         const newMessages = newCount - currentCount;
                         if (indicator) {
-                            indicator.textContent = `✨ ${newMessages} new message${newMessages > 1 ? 's' : ''} (9-bucket search)`;
+                            indicator.textContent = `✨ ${newMessages} new message${newMessages > 1 ? 's' : ''} (3km area)`;
                             setTimeout(() => {
                                 if (indicator) {
-                                    indicator.textContent = 'Auto-refresh: 20sec (9-bucket)';
+                                    indicator.textContent = 'Auto-refresh: 20sec';
                                     indicator.classList.remove('refreshing');
                                 }
                             }, 2000);
                         }
                     } else {
                         if (indicator) {
-                            indicator.textContent = '✓ Up to date (9-bucket search)';
+                            indicator.textContent = '✓ Up to date (3km area)';
                             setTimeout(() => {
                                 if (indicator) {
-                                    indicator.textContent = 'Auto-refresh: 20sec (9-bucket)';
+                                    indicator.textContent = 'Auto-refresh: 20sec';
                                     indicator.classList.remove('refreshing');
                                 }
                             }, 1500);
@@ -1674,7 +1610,7 @@
                         indicator.textContent = '⚠️ Refresh failed';
                         setTimeout(() => {
                             if (indicator) {
-                                indicator.textContent = 'Auto-refresh: 20sec (9-bucket)';
+                                indicator.textContent = 'Auto-refresh: 20sec';
                                 indicator.classList.remove('refreshing');
                             }
                         }, 2000);
@@ -2005,7 +1941,7 @@
                     this.locationInfo.innerHTML = `
                         <span class="status-indicator"></span>
                         ${locationText}
-                        <span id="autoRefreshIndicator" class="auto-refresh-indicator"><strong>Auto-refresh: 20sec (9-bucket)</strong></span>
+                        <span id="autoRefreshIndicator" class="auto-refresh-indicator"><strong>Auto-refresh: 20sec</strong></span>
                         <div class="user-info">Chatting as: ${this.username} • Reputation: ${this.userReputation}</div>
                     `;
                 }
