@@ -1343,8 +1343,8 @@
                                             message.timestamp > this.lastMessageTime) {
                                             
                                             if (message.location) {
-                                                // Extract radius from the bucket we found this message in
-                                                const otherUserRadius = this.extractRadiusFromLocationKey(locationKey);
+                                                // Use the radius from the message data, not the bucket name
+                                                const otherUserRadius = message.radius || this.extractRadiusFromLocationKey(locationKey);
                                                 
                                                 if (this.isWithinRange(message.location, otherUserRadius)) {
                                                     await this.addMessageToUI(message, false);
