@@ -1,208 +1,72 @@
-# ProximityChat Mobile App 📱
+# Nearby 📡
 
-A location-based real-time chat application for iOS and Android, built with Capacitor.
+**Connect with the people around you.**
+
+Nearby is an app built on one simple idea: **let people connect with the people physically near them.** Not followers, not friends-of-friends, not strangers on the other side of the world — the people in the same café, campus, concert, train, neighbourhood or city block as you, right now.
+
+Open the app, and you're in a live conversation with everyone within about 3 km. No sign-up, no profile, no friend requests.
+
+## The Idea 💡
+
+We are surrounded by people every day, yet most of our online conversations happen with people far away. Nearby flips that around:
+
+- **Proximity first** — who you can talk to is decided by where you are, not who you already know.
+- **Instant and anonymous** — you get a random callsign (e.g. `NEON-42`) and can start talking immediately.
+- **Ephemeral** — conversations live in the moment; messages disappear after an hour.
+- **Local by nature** — ask what's happening nearby, find people at the same event, share a tip about the area, or just say hi.
 
 ## Features ✨
-- 🌍 **Location-Based Chat** - Talk to people within your chosen radius (50m-5km)
-- 📱 **Native Mobile Apps** - iOS and Android versions
-- 🔄 **Real-time Messaging** - Automatic message refresh every minute
-- ⚙️ **Customizable Settings** - Set your username and chat radius
-- 🔒 **Privacy-Focused** - Messages expire after 1 hour
-- 🎨 **Beautiful UI** - Modern gradient design with smooth animations
 
-## Development Setup 🛠️
+- 🌍 **Location-based chat** — talk with everyone within ~3 km of you
+- 🛰️ **Radar view** — see roughly how far away and in which direction other people are
+- 🗺️ **Custom location** — pick a spot on a map instead of using your device's GPS
+- 🕶️ **Anonymous callsigns** — a generated name you can change any time
+- ⏳ **Auto-expiring messages** — messages older than one hour are hidden
+- 🧹 **Delete your thread** — remove your own messages whenever you like
+- 🛡️ **Content filtering and reputation** — basic protection against spam and abuse
 
-### Prerequisites
-- **Node.js** (v14 or higher)
-- **npm** or **yarn**
+## How It Works ⚙️
 
-#### For iOS Development:
-- **macOS** required
-- **Xcode** (latest version from App Store)
-- **CocoaPods** (`sudo gem install cocoapods`)
+1. The app asks for your location (or you choose one on the map).
+2. Your position is mapped to a set of nearby location buckets, so you see messages from people around you without sharing your exact coordinates in the chat.
+3. Messages are stored in a Firebase Realtime Database and refreshed automatically.
+4. Only messages within range and less than an hour old are shown.
 
-#### For Android Development:
-- **Android Studio** (with Android SDK)
-- **Java 8+**
+## Running Locally 🛠️
 
-### Installation
+The app is plain HTML, CSS and JavaScript — no build step.
 
-1. **Clone and install dependencies:**
-   ```bash
-   git clone <your-repo>
-   cd proximity
-   npm install
-   ```
+```bash
+git clone https://github.com/vigneshjeyaraman/nearby.git
+cd nearby
+python3 -m http.server 8000
+# open http://localhost:8000
+```
 
-2. **Build and sync to native platforms:**
-   ```bash
-   npm run sync
-   ```
+Location access in the browser requires `localhost` or HTTPS.
 
-## Mobile Development 📲
+### Files 📁
 
-### iOS App
+- **`index.html`** — app layout
+- **`app.js`** — app logic (location, chat, radar, moderation)
+- **`styles.css`** — styling
 
-1. **Open iOS project:**
-   ```bash
-   npm run ios
-   ```
-   This opens Xcode with your native iOS project.
+## License and Commercial Use 📄
 
-2. **Configure in Xcode:**
-   - Select your development team
-   - Set deployment target (iOS 11.0+)
-   - Configure signing certificates
+© 2025 Vignesh Jeyaraman. The concept, design and code of Nearby were created by Vignesh Jeyaraman.
 
-3. **Required iOS Permissions:**
-   Add these to `ios/App/App/Info.plist`:
-   ```xml
-   <key>NSLocationWhenInUseUsageDescription</key>
-   <string>ProximityChat needs location access to connect you with nearby users</string>
-   ```
+This project is released under the **[PolyForm Noncommercial License 1.0.0](LICENSE)**:
 
-4. **Build and Run:**
-   - Click ▶️ in Xcode to build and run on simulator/device
+- ✅ You may view, study and use the code for **personal, educational, research and other non-commercial purposes**.
+- ❌ **Any commercial use** — including building a product, service or business on this code or a derivative of it — **requires a separate written license**.
 
-### Android App
-
-1. **Open Android project:**
-   ```bash
-   npm run android
-   ```
-   This opens Android Studio with your native Android project.
-
-2. **Configure in Android Studio:**
-   - Install required SDK versions
-   - Setup device/emulator
-
-3. **Required Android Permissions:**
-   Already configured in `android/app/src/main/AndroidManifest.xml`:
-   ```xml
-   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-   <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-   <uses-permission android:name="android.permission.INTERNET" />
-   ```
-
-4. **Build and Run:**
-   - Click ▶️ in Android Studio or use `./gradlew assembleDebug`
-
-## Development Workflow 🔄
-
-### Making Changes
-
-1. **Edit web code** (HTML/CSS/JS in root directory)
-2. **Build and sync:**
-   ```bash
-   npm run sync
-   ```
-3. **Test in browser:**
-   ```bash
-   npm run serve
-   # Open http://localhost:8000
-   ```
-4. **Open native IDEs to test on devices:**
-   ```bash
-   npm run ios     # Opens Xcode
-   npm run android # Opens Android Studio
-   ```
-
-### Key Files 📁
-
-- **`index.html`** - Main app UI and logic
-- **`capacitor.config.json`** - Native app configuration  
-- **`manifest.json`** - PWA manifest for app metadata
-- **`package.json`** - Build scripts and dependencies
-- **`dist/`** - Built web assets for native apps
-- **`ios/`** - Native iOS project (Xcode)
-- **`android/`** - Native Android project (Android Studio)
-
-## Deployment 🚀
-
-### iOS App Store
-
-1. **Archive in Xcode:**
-   - Select "Generic iOS Device" 
-   - Product → Archive
-   - Upload to App Store Connect
-
-2. **Requirements:**
-   - Apple Developer Account ($99/year)
-   - App Store icons (various sizes)
-   - App Store description and screenshots
-
-### Google Play Store
-
-1. **Generate signed APK:**
-   ```bash
-   cd android
-   ./gradlew assembleRelease
-   ```
-
-2. **Requirements:**
-   - Google Play Developer Account ($25 one-time)
-   - Signed APK/AAB
-   - Play Store listing with screenshots
-
-## Troubleshooting 🔧
-
-### Common Issues:
-
-**iOS build fails:**
-- Install Xcode Command Line Tools: `xcode-select --install`
-- Install CocoaPods: `sudo gem install cocoapods`
-- Run `pod install` in `ios/App/` directory
-
-**Android build fails:**
-- Ensure Android Studio and SDK are installed
-- Set ANDROID_HOME environment variable
-- Accept all SDK licenses
-
-**Location not working:**
-- Test on real device (simulator location is unreliable)
-- Check permissions are granted in device settings
-- Ensure HTTPS in production (required for geolocation)
-
-**Firebase connection issues:**
-- Check internet connectivity
-- Verify Firebase URL in code
-- Test web version first: `npm run serve`
-
-## Features in Detail 📋
-
-### Location System
-- **Grid-based proximity** - Uses coordinate grids for efficient grouping
-- **Dynamic precision** - Adjusts grid size based on chat radius
-- **Distance failsafe** - Prevents cross-continental message leakage
-- **IP location comparison** - Detects VPN usage for debugging
-
-### Message Management  
-- **Auto-expiry** - Messages older than 1 hour are filtered out
-- **Real-time sync** - 60-second auto-refresh cycle
-- **Duplicate prevention** - Message ID system prevents duplicates
-- **Local storage** - Username and radius preferences saved
-
-### Mobile Optimizations
-- **Safe area support** - Handles iPhone notches and Android navigation
-- **Touch-friendly** - Optimized button sizes and spacing
-- **Native feel** - Platform-specific status bar and splash screen
-- **Offline resilience** - Graceful error handling for network issues
+**If you want to commercialize Nearby or something built from it, please contact me first:** [LinkedIn](https://www.linkedin.com/in/vignesh94/)
 
 ## Contributing 🤝
 
+Ideas, bug reports and pull requests are welcome. By submitting a contribution you agree that it can be included in this project under the same license terms.
+
 1. Fork the repository
-2. Create your feature branch
-3. Make changes to web code (`index.html`, etc.)
-4. Test on both web and mobile platforms
-5. Submit a pull request
-
-## License 📄
-
-© 2025 Vignesh Jeyaraman. All rights reserved.
-
----
-
-**Need Help?** 
-- Check [Capacitor Documentation](https://capacitorjs.com/docs)
-- Open an issue in this repository
-- Contact: [LinkedIn](https://www.linkedin.com/in/vignesh94/)
+2. Create a feature branch
+3. Make your changes
+4. Open a pull request
